@@ -4,7 +4,7 @@ import TDFunctions as TDF
 
 class TriggerExt:
 	"""
-	TriggerExt description
+	Read and route MIDI date from AbletonMidi components
 	"""
 
 	WILDCARD = "_"
@@ -41,6 +41,8 @@ class TriggerExt:
 		table_name = self.NoteTableNameForTrack(track_name)
 		note_table = op(table_name)
 		_, trigger_name_column = self.TableHeaders()
+
 		numbered_cells = note_table.cells(str(note_number), trigger_name_column)
 		wildcard_cells = note_table.cells(TriggerExt.WILDCARD, trigger_name_column)
+
 		return numbered_cells + wildcard_cells

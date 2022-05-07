@@ -21,5 +21,6 @@ def create_new_midi_table(table_operator_name) -> op:
 	new_table = parent().create(tableDAT, table_operator_name)
 	new_table.par.file = f"{table_operator_name}.tsv"
 	new_table.par.syncfile = True
+	new_table.par.edit.pulse()
 	new_table.insertRow(parent().TableHeaders())
 	return new_table
