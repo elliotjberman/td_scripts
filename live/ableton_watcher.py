@@ -33,7 +33,7 @@ def turn_on_visual(name: str) -> None:
     visual_name = f"{name}_visual"
     for index, connector in enumerate(ableton_switcher.inputs):
         operator = connector.parent()
-        if operator is op(visual_name):
+        if operator.name == visual_name:
             operator.allowCooking = True
             ableton_switcher.par.index = index
         else:
@@ -46,7 +46,11 @@ def turn_on_placeholder() -> None:
     toggle_placeholder(False)
 
 def get_name_of_track() -> str:
-    return "headphones_kid" if op('test_toggle')[0] else "pipes"
+    song_id = int(op("song_id")[0])
+    # print(song_id)
+    track_name = op("songs").cell(str(song_id), "song_name")
+    # print(track_name)
+    return track_name
 
 def toggle_placeholder(is_on: bool) -> None:
     parent().par.Index = int(is_on)
