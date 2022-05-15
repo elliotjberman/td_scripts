@@ -25,7 +25,7 @@ class TriggerExt:
 		trigger_names = self.get_target_operator_names_for_track(track_name, note_number)
 
 		for trigger_name in trigger_names:
-			operator = op(f'/*/{trigger_name}')
+			operator = op(f'../{trigger_name}')
 			if operator is None:
 				continue
 			if type(operator) == triggerCHOP:
