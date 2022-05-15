@@ -1,24 +1,3 @@
-# me - this DAT
-#
-# channel - the Channel object which has changed
-# sampleIndex - the index of the changed sample
-# val - the numeric value of the changed sample
-# prev - the previous sample value
-#
-# Make sure the corresponding toggle is enabled in the CHOP Execute DAT.
-
-def onOffToOn(channel, sampleIndex, val, prev):
-    return
-
-def whileOn(channel, sampleIndex, val, prev):
-    return
-
-def onOnToOff(channel, sampleIndex, val, prev):
-    return
-
-def whileOff(channel, sampleIndex, val, prev):
-    return
-
 def onValueChange(channel, sampleIndex, val, prev):
     on = bool(channel)
     if on:
@@ -43,6 +22,10 @@ def turn_on_visual(name: str) -> None:
 
 def turn_on_placeholder() -> None:
     op('placeholder').allowCooking = True
+    ableton_switcher = op("ableton_switcher")
+    for connector in ableton_switcher.inputs:
+        operator = connector.parent()
+        operator.allowCooking = False
     toggle_placeholder(False)
 
 def get_name_of_track() -> str:
@@ -54,3 +37,15 @@ def get_name_of_track() -> str:
 
 def toggle_placeholder(is_on: bool) -> None:
     parent().par.Index = int(is_on)
+
+def onOffToOn(channel, sampleIndex, val, prev):
+    return
+
+def whileOn(channel, sampleIndex, val, prev):
+    return
+
+def onOnToOff(channel, sampleIndex, val, prev):
+    return
+
+def whileOff(channel, sampleIndex, val, prev):
+    return
