@@ -127,3 +127,7 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# TouchDesigner
+big_kahuna/Backup
+big_kahuna/master_no_tsv.*.toe
