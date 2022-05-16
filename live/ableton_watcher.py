@@ -1,5 +1,5 @@
 def onValueChange(channel, sampleIndex, val, prev):
-    on = bool(channel)
+    on = channel > 0
     if on:
         track_name = get_name_of_track()
         turn_on_visual(track_name)
