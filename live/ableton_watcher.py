@@ -1,3 +1,7 @@
+import inspect
+
+DELAY_SECONDS = op('lag1').par.lag1
+
 def onValueChange(channel, sampleIndex, val, prev):
     on = channel > 0
     if on:
@@ -18,15 +22,17 @@ def turn_on_visual(name: str) -> None:
         else:
             operator.allowCooking = False
 
-    toggle_visual(True)
+    # Allows you to run things after a sleep period
+    # in TD - sleep() will block
+    run(op('toggle_visual').text, True, delayFrames = 60 * DELAY_SECONDS)
 
 def turn_on_placeholder() -> None:
     op('placeholder').allowCooking = True
     ableton_switcher = op("ableton_switcher")
     for connector in ableton_switcher.inputs:
-        operator = connector.parent()
-        operator.allowCooking = False
-    toggle_visual(False)
+        visual_operator = connector.parent()
+        run(op('turn_off_cook').text, visual_operator, delayFrames = 60 * DELAY_SECONDS)
+    run(op('toggle_visual').text, False, delayFrames = 0)
 
 def get_name_of_track() -> str:
     song_id = int(op("song_id")[0])
@@ -34,9 +40,6 @@ def get_name_of_track() -> str:
     track_name = op("songs").cell(str(song_id), "song_name")
     # print(track_name)
     return track_name
-
-def toggle_visual(is_on: bool) -> None:
-    parent().par.Index = int(is_on)
 
 def onOffToOn(channel, sampleIndex, val, prev):
     return
