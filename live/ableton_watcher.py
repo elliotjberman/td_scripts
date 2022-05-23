@@ -18,7 +18,7 @@ def turn_on_visual(name: str) -> None:
         else:
             operator.allowCooking = False
 
-    toggle_placeholder(True)
+    toggle_visual(True)
 
 def turn_on_placeholder() -> None:
     op('placeholder').allowCooking = True
@@ -26,7 +26,7 @@ def turn_on_placeholder() -> None:
     for connector in ableton_switcher.inputs:
         operator = connector.parent()
         operator.allowCooking = False
-    toggle_placeholder(False)
+    toggle_visual(False)
 
 def get_name_of_track() -> str:
     song_id = int(op("song_id")[0])
@@ -35,7 +35,7 @@ def get_name_of_track() -> str:
     # print(track_name)
     return track_name
 
-def toggle_placeholder(is_on: bool) -> None:
+def toggle_visual(is_on: bool) -> None:
     parent().par.Index = int(is_on)
 
 def onOffToOn(channel, sampleIndex, val, prev):
