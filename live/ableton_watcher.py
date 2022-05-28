@@ -1,9 +1,14 @@
 import inspect
 
 DELAY_SECONDS = op('lag1').par.lag1
+DISCONNECTED_VALUE = 0
+TEMP_DISCONNECT_VALUE = -1
 
-def onValueChange(channel, sampleIndex, val, prev):
-    on = channel > 0
+def onValueChange(channelValue, sampleIndex, val, prev):
+    if channelValue == TEMP_DISCONNECT_VALUE:
+        return
+
+    on = channelValue > DISCONNECTED_VALUE
     if on:
         track_name = get_name_of_track()
         turn_on_visual(track_name)
@@ -36,9 +41,7 @@ def turn_on_placeholder() -> None:
 
 def get_name_of_track() -> str:
     song_id = int(op("song_id")[0])
-    # print(song_id)
     track_name = op("songs").cell(str(song_id), "song_name")
-    # print(track_name)
     return track_name
 
 def onOffToOn(channel, sampleIndex, val, prev):
