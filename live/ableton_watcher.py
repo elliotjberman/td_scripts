@@ -1,8 +1,7 @@
-import inspect
-
 DELAY_SECONDS = op('lag1').par.lag1
 DISCONNECTED_VALUE = 0
 TEMP_DISCONNECT_VALUE = -1
+FPS = 60
 
 def onValueChange(channelValue, sampleIndex, val, prev):
     if channelValue == TEMP_DISCONNECT_VALUE:
@@ -29,14 +28,14 @@ def turn_on_visual(name: str) -> None:
 
     # Allows you to run things after a sleep period
     # in TD - sleep() will block
-    run(op('toggle_visual').text, True, delayFrames = 60 * DELAY_SECONDS)
+    run(op('toggle_visual').text, True, delayFrames = FPS * DELAY_SECONDS)
 
 def turn_on_placeholder() -> None:
     op('placeholder').allowCooking = True
     ableton_switcher = op("ableton_switcher")
     for connector in ableton_switcher.inputs:
         visual_operator = connector.parent()
-        run(op('turn_off_cook').text, visual_operator, delayFrames = 60 * DELAY_SECONDS)
+        run(op('turn_off_cook').text, visual_operator, delayFrames = FPS * DELAY_SECONDS)
     run(op('toggle_visual').text, False, delayFrames = 0)
 
 def get_name_of_track() -> str:
