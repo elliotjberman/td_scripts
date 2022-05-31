@@ -4,7 +4,7 @@ import TDFunctions as TDF
 
 class TriggerExt:
 	"""
-	Read and route MIDI date from AbletonMidi components
+	Read and route MIDI data from AbletonMidi components
 	"""
 
 	WILDCARD = "_"
