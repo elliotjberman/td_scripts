@@ -5,14 +5,12 @@ uniform float MASK_TYPE;
 uniform float HALATION;
 uniform float DIFFUSION;
 uniform float BRIGHTNESS;
+uniform float MASK_SIZE;
 
 // All parameter floats need to have COMPAT_PRECISION in front of them
 const float GAMMA_OUTPUT = 1.0;
-const float SHARPNESS_H = 0.6;
-const float SHARPNESS_V = 1.0;
 const float MASK_STRENGTH_MIN = 0.2;
 const float MASK_STRENGTH_MAX = 0.8;
-const float MASK_SIZE = 1.0;
 const float SCANLINE_STRENGTH_MIN = 0.0;
 const float SCANLINE_STRENGTH_MAX = 1.0;
 const float SCANLINE_BEAM_MIN = 1.0;
@@ -45,19 +43,6 @@ void main()
     vec2 tex_size = SourceSize.xy;
     vec2 midpoint = vec2(0.5, 0.5);
     float scan_offset = 0.0;
-    float timer = uFrame;
-
-    if (INTERLACING_TOGGLE > 0.5 && uResolution.y >= 400.)
-    {
-        // tex_size.y *= 0.5;
-
-        if (mod(timer, 2.0) > 0.0)
-        {
-            midpoint.y = 0.75;
-            scan_offset = 0.5;
-        }        
-        else midpoint.y = 0.25;
-    }
 
     vec2 co = vTexCoord * tex_size * (1.0 / uResolution.xy);
     vec2 xy = co;
@@ -137,10 +122,9 @@ void main()
     col += diff * DIFFUSION;
     col = pow(col, vec3(1.0 / GAMMA_OUTPUT));
 
-        // Create scanline effect
-    float scanlines = sin(vUV.y * uResolution.y * 2.0 * 3.14159);
-    scanlines = smoothstep(0.9, 1.0, scanlines);
-    col *= 1.0 - scanlines * 0.3;
+    float scanlines = sin(vUV.y * (uResolution.y / 6.0) * 2.0 * 3.14159);
+    scanlines = smoothstep(SCANLINE_STRENGTH_MIN, SCANLINE_STRENGTH_MAX, scanlines);
+    col *= 1.0 - scanlines * 0.5;
 
    fragColor = vec4(col, 1.0);
 }
