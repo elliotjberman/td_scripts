@@ -129,6 +129,6 @@ dmypy.json
 .pyre/
 
 # TouchDesigner
-big_kahuna/Backup
-big_kahuna/master_no_tsv.*.toe
+Backup/
+*.*.toe
 big_kahuna/config.json
