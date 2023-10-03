@@ -13,9 +13,6 @@ const float MASK_STRENGTH_MIN = 0.2;
 const float MASK_STRENGTH_MAX = 0.8;
 const float SCANLINE_STRENGTH_MIN = 0.0;
 const float SCANLINE_STRENGTH_MAX = 1.0;
-const float SCANLINE_BEAM_MIN = 1.0;
-const float SCANLINE_BEAM_MAX = 1.0;
-const float INTERLACING_TOGGLE = 1.0;
 
 
 const float PI = 3.14159265358979323846;
@@ -42,7 +39,6 @@ void main()
 {
     vec2 tex_size = SourceSize.xy;
     vec2 midpoint = vec2(0.5, 0.5);
-    float scan_offset = 0.0;
 
     vec2 co = vTexCoord * tex_size * (1.0 / uResolution.xy);
     vec2 xy = co;
@@ -53,17 +49,12 @@ void main()
     vec2 tex_co = (floor(pix_co) + midpoint) / tex_size;
     vec2 dist = fract(pix_co);
 
-    vec3 col, col2, diff;
+    vec3 col, diff;
 
     col = texture(Source, xy).rgb;
     diff = texture(Source, xy).rgb;
 
     float rgb_max = max(col.r, max(col.g, col.b));
-    float sample_offset = (uResolution.y * outsize.w) * 0.5;
-    float scan_pos = xy.y * tex_size.y + scan_offset;
-    float scan_strength = mix(SCANLINE_STRENGTH_MAX, SCANLINE_STRENGTH_MIN, rgb_max);
-    float scan_beam = clamp(rgb_max * SCANLINE_BEAM_MAX, SCANLINE_BEAM_MIN, SCANLINE_BEAM_MAX);
-    vec3 scan_weight = vec3(0.0);
 
     float mask_colors;
     float mask_dot_width;
@@ -106,17 +97,8 @@ void main()
 
     mask_weight *= mix(1.0, mask_mul, mask_dither);
     mask_weight = mix(vec3(1.0), mask_weight, clamp(MASK_TYPE, 0.0, 1.0));
-
-    col2 = (col * mask_weight);
-    col2 *= BRIGHTNESS;
-
-    scan_weight = get_scanline_weight(scan_pos - sample_offset, scan_beam, scan_strength);
-    col = clamp(col2 * scan_weight, 0.0, 1.0);
-    scan_weight = get_scanline_weight(scan_pos, scan_beam, scan_strength);
-    col += clamp(col2 * scan_weight, 0.0, 1.0);
-    scan_weight = get_scanline_weight(scan_pos + sample_offset, scan_beam, scan_strength);
-    col += clamp(col2 * scan_weight, 0.0, 1.0);
-    col /= 3.0;
+    // Too bright otherwise ???
+    col /=3;
 
     col += diff * mask_weight * HALATION;
     col += diff * DIFFUSION;
@@ -126,5 +108,5 @@ void main()
     scanlines = smoothstep(SCANLINE_STRENGTH_MIN, SCANLINE_STRENGTH_MAX, scanlines);
     col *= 1.0 - scanlines * 0.5;
 
-   fragColor = vec4(col, 1.0);
+    fragColor = vec4(col, 1.0);
 }
