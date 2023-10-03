@@ -1,5 +1,4 @@
 uniform vec2 uResolution;
-uniform float uFrame;
 
 uniform float MASK_TYPE;
 uniform float HALATION;
