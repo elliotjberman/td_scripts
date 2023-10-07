@@ -17,7 +17,7 @@ def onValueChange(channelValue, sampleIndex, val, prev):
 
 def turn_on_visual(name: str) -> None:
     ableton_switcher = op("ableton_switcher")
-    visual_name = f"{name}_visual"
+    visual_name = f"{name}_visual_v2"
     for index, connector in enumerate(ableton_switcher.inputs):
         operator = connector.parent()
         if operator.name == visual_name:
