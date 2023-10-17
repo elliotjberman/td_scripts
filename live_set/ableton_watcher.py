@@ -7,17 +7,18 @@ def onValueChange(channelValue, sampleIndex, val, prev):
     if channelValue == TEMP_DISCONNECT_VALUE:
         return
 
-    on = channelValue > DISCONNECTED_VALUE
-    if on:
+    ableton_connected = channelValue > DISCONNECTED_VALUE
+    if ableton_connected:
         track_name = get_name_of_track()
         turn_on_visual(track_name)
     else:
         turn_on_placeholder()
+
     return
 
 def turn_on_visual(name: str) -> None:
     ableton_switcher = op("ableton_switcher")
-    visual_name = f"{name}_visual"
+    visual_name = f"{name}_visual_v2"
     for index, connector in enumerate(ableton_switcher.inputs):
         operator = connector.parent()
         if operator.name == visual_name:
@@ -29,6 +30,8 @@ def turn_on_visual(name: str) -> None:
     # Allows you to run things after a sleep period
     # in TD - sleep() will block
     run(op('toggle_visual').text, True, delayFrames = FPS * DELAY_SECONDS)
+    
+    return
 
 def turn_on_placeholder() -> None:
     op('placeholder').allowCooking = True
@@ -37,6 +40,8 @@ def turn_on_placeholder() -> None:
         visual_operator = connector.parent()
         run(op('turn_off_cook').text, visual_operator, delayFrames = FPS * DELAY_SECONDS)
     run(op('toggle_visual').text, False, delayFrames = 0)
+    
+    return
 
 def get_name_of_track() -> str:
     song_id = int(op("song_id")[0])
