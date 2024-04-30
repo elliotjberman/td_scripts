@@ -6,9 +6,21 @@ inherited_params = [
 ]
 
 def onTableChange(dat):
-	for row in dat.rows()[1:]:
-		name = row[0]
+	# Exclude header row, fetch all operators by name
+	operators = [op(name) for name, in dat.rows()[1:]] 	
+
+	# Go top to bottom visually
+	operators.sort(key=lambda operator: operator.nodeCenterY, reverse=True)
+
+	for operator in operators:
+		# Set params uniformly to point to parents
 		for param in inherited_params:
-			op(name).par[param].expr = f'parent().par.{param}'
+			operator.par[param].expr = f'parent().par.{param}'
+
+		# Protect against double-connecting
+		for connector in operator.outputConnectors:
+			connector.disconnect()
+
+		operator.outputConnectors[0].connect(op('ableton_switcher'))
 
 	return
