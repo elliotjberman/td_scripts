@@ -1,10 +1,3 @@
-# Point the parameters at the parent's
-inherited_params = [
-	"Home",
-	"Resolutionw",
-	"Resolutionh"
-]
-
 def onTableChange(dat):
 	# Exclude header row, fetch all operators by name
 	operators = [op(name) for name, in dat.rows()[1:]] 	
@@ -13,14 +6,6 @@ def onTableChange(dat):
 	operators.sort(key=lambda operator: operator.nodeCenterY, reverse=True)
 
 	for operator in operators:
-		# Set params uniformly to point to parents
-		for param in inherited_params:
-			operator.par[param].expr = f'parent().par.{param}'
-
-		# Protect against double-connecting
-		for connector in operator.outputConnectors:
-			connector.disconnect()
-
-		operator.outputConnectors[0].connect(op('ableton_switcher'))
+		mod.common.reset_visual(operator)
 
 	return
