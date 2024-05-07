@@ -5,12 +5,12 @@
 # 
 # Make sure the corresponding toggle is enabled in the Execute DAT.
 
+
+
 def onStart():
-	for row in op('visual_entries').rows()[1:]:
-		operator = op(row[0])
-		operator.allowCooking = False
-		mod.common.reset_visual(operator)
-	return
+	table = op("visual_entries")
+	mod.common.disable_all_visuals(table)
+	mod.common.reset_all_visuals(table)
 
 def onCreate():
 	return
