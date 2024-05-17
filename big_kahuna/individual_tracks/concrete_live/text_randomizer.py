@@ -18,8 +18,6 @@ def iterate_string(input_string, reset_char, randomize):
 
     return "".join(chars)
 
-
-
 def onCreate():
     return
 
