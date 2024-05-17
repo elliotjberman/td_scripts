@@ -1,4 +1,4 @@
 note_number	trigger_name
 36	ResetTextEnvelope
 37	ScrambleTextEnvelope
-62	CircleBlurEnvelope
+60	CircleBlurEnvelope
