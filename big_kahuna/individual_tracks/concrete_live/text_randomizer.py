@@ -1,10 +1,3 @@
-# me - this DAT
-# 
-# frame - the current frame
-# state - True if the timeline is paused
-# 
-# Make sure the corresponding toggle is enabled in the Execute DAT.
-
 import random
 
 def onStart():
@@ -41,10 +34,10 @@ def onFrameStart(frame):
         input_op.text = new_string
         return
 
-    if frame % 5 != 0:
+    if frame % parent().par.Randomframes != 0:
         return
     
-    reset_char = frame % 10 == 0
+    reset_char = frame % parent().par.Resetframes == 0
     new_string = iterate_string(input_op.text, reset_char, True)
     input_op.text = new_string
     return

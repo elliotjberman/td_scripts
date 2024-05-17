@@ -1,4 +1,5 @@
 note_number	trigger_name
+36	ResetTextEnvelope
 60	BoxFlashEnvelope
 61	BoxSoftEnvelope
 62	CircleBlurEnvelope
