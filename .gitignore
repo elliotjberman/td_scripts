@@ -132,3 +132,5 @@ dmypy.json
 Backup/
 *.*.toe
 big_kahuna/config.json
+*.mp4
+*.mov
