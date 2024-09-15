@@ -4,6 +4,7 @@ TEMP_DISCONNECT_VALUE = -1
 FPS = 60
 
 def onValueChange(channelValue, sampleIndex, val, prev):
+    # Ableton will temporarily set the ID to -1 - just don't do anything yet
     if channelValue == TEMP_DISCONNECT_VALUE:
         return
 
@@ -22,10 +23,10 @@ def turn_on_visual(name: str) -> None:
     for index, connector in enumerate(ableton_switcher.inputs):
         operator = connector.parent()
         if operator.name == visual_name:
-            operator.allowCooking = True
+            mod.common.enable_visual(operator)
             ableton_switcher.par.index = index
         else:
-            operator.allowCooking = False
+            mod.common.disable_visual(operator)
 
     # Allows you to run things after a sleep period
     # in TD - sleep() will block
@@ -38,7 +39,7 @@ def turn_on_placeholder() -> None:
     ableton_switcher = op("ableton_switcher")
     for connector in ableton_switcher.inputs:
         visual_operator = connector.parent()
-        run(op('turn_off_cook').text, visual_operator, delayFrames = FPS * DELAY_SECONDS)
+        run(op('disable_operator').text, visual_operator, delayFrames = FPS * DELAY_SECONDS)
     run(op('toggle_visual').text, False, delayFrames = 0)
     
     return

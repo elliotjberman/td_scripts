@@ -9,7 +9,19 @@ def disable_all_visuals(dat):
     operators = [op(name) for name, in dat.rows()[1:]]
 
     for operator in operators:
-         operator.allowCooking = False
+        disable_visual(operator)
+
+def enable_visual(operator):
+    if operator.par['Disable'] is not None:
+        operator.par.Disable = False
+        return
+    operator.allowCooking = True
+
+def disable_visual(operator):
+    if operator.par['Disable'] is not None:
+        operator.par.Disable = True
+        return
+    operator.allowCooking = False
 
 def reset_all_visuals(dat):
     # Exclude header row, fetch all operators by name
@@ -34,5 +46,5 @@ def reset_visual(operator):
 
     operator.outputConnectors[0].connect(op('ableton_switcher'))
 
-    # Set viewer to be on
-    operator.viewer = True
+    # Set viewer to be off - otherwise it may request data from its network
+    operator.viewer = False
