@@ -31,7 +31,7 @@ def reset_all_visuals(dat):
 	operators.sort(key=lambda operator: operator.nodeCenterY, reverse=True)
 
 	for operator in operators:
-		mod.common.reset_visual(operator)
+		reset_visual(operator)
 
 	return
 
@@ -48,3 +48,11 @@ def reset_visual(operator):
 
     # Set viewer to be off - otherwise it may request data from its network
     operator.viewer = False
+
+    # Reload the comp from its external .tox - if you don't do this you could end up with some
+    # dirty state because of TDAbleton/Max bugs where track connections get shuffled.
+    #
+    # This looks like it happens whenever a visual is left around and a new set is opened, causing
+    # TDAbleton components that are assigned to certain tracks to get assigned to other ones (based
+    # on index maybe?)
+    operator.par.enableexternaltoxpulse.pulse()
