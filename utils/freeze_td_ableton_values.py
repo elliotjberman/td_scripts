@@ -4,7 +4,7 @@
 # This goes through and hardcodes the indices of all the tracks/chains so even if you open the wrong Ableton set, the TDAbleton COMPs
 # should not get altered.
 
-# Use with an OPFind input looking for "Other COMPs".
+# Use in a DAT-Execute with an OPFind input looking for "Other COMPs".
 
 DONT_ALTER = (
 	"Autosync",
