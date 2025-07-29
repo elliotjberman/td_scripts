@@ -22,7 +22,6 @@ def whileOff(channel, sampleIndex, val, prev):
 def onValueChange(channel, sampleIndex, val, prev):
 	allow = bool(1-val)
 	op('raymarchRender3D').allowCooking = allow
-	op('bloom').allowCooking = allow
 	op('rgbaDelay').allowCooking = allow
 	return
 	
