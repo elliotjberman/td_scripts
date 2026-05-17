@@ -66,6 +66,7 @@ Code layout:
 
 - `ableton_utilities/live_set.py`: gzip/XML file handling and PluginDevice traversal.
 - `ableton_utilities/proq3_vst3.py`: FabFilter Pro-Q 3 VST3 `ProcessorState` validation and byte patching.
+- `ableton_utilities/proq3/state.py`: Pro-Q 3 state model with band list/replace/add/update/delete operations.
 - `ableton_utilities/curve_bender.py`: UAD Curve Bender parameter parsing and conversion planning.
 - `ableton_utilities/cli.py`: command-line reporting and write orchestration.
 
@@ -73,13 +74,23 @@ Code layout:
 
 `inspect_curve_bender.py` reads UAD Chandler Limited Curve Bender VST3
 parameters that Ableton exposes in the XML and turns them into a normalized EQ
-plan. It does not write replacement Pro-Q bands yet.
+plan.
 
 Example:
 
 ```powershell
 python "Ableton Utilities\inspect_curve_bender.py" "C:\path\to\Song.als"
 python "Ableton Utilities\inspect_curve_bender.py" "C:\path\to\Song.als" --json
+```
+
+`write_curve_bender_to_proq.py` is the first Pro-Q writer proof. It expects one
+Curve Bender and at least one Pro-Q 3 in the set, then writes the Curve Bender
+plan into the first Pro-Q 3 instance as zero-latency bands. It does not remove
+or replace the original Curve Bender device yet.
+
+```powershell
+python "Ableton Utilities\write_curve_bender_to_proq.py" "C:\path\to\Song.als"
+python "Ableton Utilities\write_curve_bender_to_proq.py" "C:\path\to\Song.als" --output "C:\path\to\Song - proq.als"
 ```
 
 Current mapping rules:
@@ -92,9 +103,18 @@ Current mapping rules:
 - Normal bell/shelf Q starts at `0.50`; high-Q / `x1.5` starts at `0.75`.
 - High-pass and low-pass filters are represented as `6 dB/oct` filters.
 
-The frequency maps are intentionally narrow for now. Unknown stepped knob
-positions are reported as skipped values rather than guessed. Add paired fixture
-sets before expanding those maps.
+The Pro-Q writer is structured through `ProQ3State`, which owns the binary
+`ProcessorState` and exposes band CRUD operations:
+
+- `list_bands()`
+- `replace_bands(...)`
+- `add_band(...)`
+- `update_band(...)`
+- `delete_band(...)`
+
+The frequency maps are intentionally narrow for now. Unknown stepped Curve
+Bender knob positions are reported as skipped values rather than guessed. Add
+paired fixture sets before expanding those maps.
 
 ## Plan for Vendor Blob Editing
 

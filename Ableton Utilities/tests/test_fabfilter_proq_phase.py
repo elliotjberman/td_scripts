@@ -91,6 +91,37 @@ class FabFilterProQPhaseTests(unittest.TestCase):
         self.assertTrue(reports[0].changed)
         self.assertIn("00000000", patched_xml)
 
+    def test_proq3_state_can_crud_bands(self) -> None:
+        state = proq3_vst3.ProQ3State(make_processor("natural_phase"))
+        first = proq3_vst3.ProQ3Band("mid", "bell", 1200.0, -0.5, 0.5)
+        second = proq3_vst3.ProQ3Band("side", "high_pass", 30.0, slope_db_oct=6)
+
+        state.replace_bands([first])
+        state.add_band(second)
+        bands = state.list_bands()
+        self.assertEqual(len(bands), 2)
+        self.assertEqual(bands[0].channel, "mid")
+        self.assertEqual(bands[0].kind, "bell")
+        self.assertAlmostEqual(bands[0].frequency_hz, 1200.0, places=2)
+        self.assertAlmostEqual(bands[0].gain_db, -0.5, places=4)
+        self.assertEqual(bands[1].kind, "high_pass")
+        self.assertEqual(bands[1].slope_db_oct, 6)
+
+        state.update_band(0, proq3_vst3.ProQ3Band("stereo", "high_shelf", 10000.0, 1.0, 0.5))
+        self.assertEqual(state.list_bands()[0].channel, "stereo")
+        state.delete_band(1)
+        self.assertEqual(len(state.list_bands()), 1)
+
+    def test_patch_block_bands_writes_zero_latency(self) -> None:
+        band = proq3_vst3.ProQ3Band("side", "low_shelf", 150.0, 1.0, 0.5)
+        result = proq3_vst3.patch_block_bands(make_block("natural_phase"), [band])
+
+        self.assertIsNone(result.warning)
+        self.assertTrue(result.changed)
+        state = proq3_vst3.state_from_block(result.block)
+        self.assertEqual(state.mode(), "zero_latency")
+        self.assertEqual(state.list_bands()[0].channel, "side")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,4 +1,4 @@
-"""FabFilter Pro-Q 3 VST3 ProcessorState patching."""
+"""FabFilter Pro-Q 3 VST3 Ableton XML adapter."""
 
 from __future__ import annotations
 
@@ -6,20 +6,20 @@ import dataclasses
 import re
 import urllib.parse
 
+from .proq3.state import (
+    MODE_BYTES,
+    MODE_LABELS,
+    MODE_OFFSET,
+    PROCESSOR_HEADER,
+    PROCESSOR_LENGTH,
+    PROCESSOR_TAIL,
+    ProQ3Band,
+    ProQ3State,
+    canonical_mode,
+    validate_processor,
+    write_bands,
+)
 
-MODE_BYTES = {
-    "zero_latency": bytes.fromhex("00000000"),
-    "natural_phase": bytes.fromhex("0000803F"),
-}
-MODE_LABELS = {
-    "zero_latency": "Zero Latency",
-    "natural_phase": "Natural Phase",
-}
-
-PROCESSOR_LENGTH = 1456
-PROCESSOR_HEADER = bytes.fromhex("464642530100000066010000")
-PROCESSOR_TAIL = bytes.fromhex("464670720100000000000000")
-MODE_OFFSET = 1260
 
 PRO_Q_RE = re.compile(r"Pro-?Q(?:\s*(?:%20)?3)?", re.IGNORECASE)
 HEX_STATE_RE = re.compile(r"(<ProcessorState>\s*)([0-9A-Fa-f\s]+?)(\s*</ProcessorState>)", re.I | re.S)
@@ -35,21 +35,16 @@ class PatchResult:
     warning: str | None = None
 
 
-def canonical_mode(mode: str) -> str:
-    key = mode.strip().lower().replace(" ", "_").replace("-", "_")
-    aliases = {
-        "zero": "zero_latency",
-        "zero_latency": "zero_latency",
-        "natural": "natural_phase",
-        "natural_phase": "natural_phase",
-    }
-    if key not in aliases:
-        raise ValueError("Mode must be zero-latency or natural-phase.")
-    return aliases[key]
-
-
 def is_proq3_block(block: str) -> bool:
     return "fabfilter" in block.lower() and PRO_Q_RE.search(block) is not None
+
+
+def state_from_block(block: str) -> ProQ3State:
+    state_match = HEX_STATE_RE.search(block)
+    if not state_match:
+        raise ValueError("No ProcessorState blob found.")
+    processor = bytes.fromhex("".join(state_match.group(2).split()))
+    return ProQ3State(processor)
 
 
 def patch_block(block: str, target_mode: str) -> PatchResult:
@@ -58,39 +53,37 @@ def patch_block(block: str, target_mode: str) -> PatchResult:
     if not state_match:
         return PatchResult(block, plugin_name, None, None, False, "No ProcessorState blob found.")
 
-    processor = bytes.fromhex("".join(state_match.group(2).split()))
-    warning = validate_processor(processor)
-    if warning:
-        return PatchResult(block, plugin_name, None, None, False, warning)
+    try:
+        state = ProQ3State(bytes.fromhex("".join(state_match.group(2).split())))
+        old_mode = state.mode()
+        state.set_mode(target_mode)
+    except ValueError as exc:
+        return PatchResult(block, plugin_name, None, None, False, str(exc))
 
-    target = MODE_BYTES[target_mode]
-    old = processor[MODE_OFFSET : MODE_OFFSET + 4]
-    if old not in MODE_BYTES.values():
-        return PatchResult(
-            block,
-            plugin_name,
-            old.hex().upper(),
-            target.hex().upper(),
-            False,
-            f"Unknown mode bytes at ProcessorState@{MODE_OFFSET}.",
-        )
-
-    if old == target:
-        return PatchResult(block, plugin_name, old.hex().upper(), target.hex().upper(), False)
-
-    patched = processor[:MODE_OFFSET] + target + processor[MODE_OFFSET + 4 :]
-    new_block = replace_processor_state(block, state_match, patched)
-    return PatchResult(new_block, plugin_name, old.hex().upper(), target.hex().upper(), True)
+    old = MODE_BYTES[old_mode].hex().upper()
+    new = MODE_BYTES[canonical_mode(target_mode)].hex().upper()
+    if old == new:
+        return PatchResult(block, plugin_name, old, new, False)
+    new_block = replace_processor_state(block, state_match, state.to_bytes())
+    return PatchResult(new_block, plugin_name, old, new, True)
 
 
-def validate_processor(processor: bytes) -> str | None:
-    if len(processor) != PROCESSOR_LENGTH:
-        return f"ProcessorState length was {len(processor)} bytes; expected {PROCESSOR_LENGTH}."
-    if not processor.startswith(PROCESSOR_HEADER):
-        return "ProcessorState header did not match the known Pro-Q 3 VST3 shape."
-    if not processor.endswith(PROCESSOR_TAIL):
-        return "ProcessorState tail did not match the known Pro-Q 3 VST3 shape."
-    return None
+def patch_block_bands(block: str, bands: list[object], target_mode: str = "zero_latency") -> PatchResult:
+    plugin_name = detect_plugin_name(block)
+    state_match = HEX_STATE_RE.search(block)
+    if not state_match:
+        return PatchResult(block, plugin_name, None, None, False, "No ProcessorState blob found.")
+
+    try:
+        state = ProQ3State(bytes.fromhex("".join(state_match.group(2).split())))
+        before = state.to_bytes()
+        state.replace_bands(bands)
+        state.set_mode(target_mode)
+    except ValueError as exc:
+        return PatchResult(block, plugin_name, None, None, False, str(exc))
+
+    new_block = replace_processor_state(block, state_match, state.to_bytes())
+    return PatchResult(new_block, plugin_name, None, None, state.to_bytes() != before)
 
 
 def replace_processor_state(block: str, match: re.Match[str], processor: bytes) -> str:
@@ -118,4 +111,3 @@ def detect_plugin_name(block: str) -> str:
         if match:
             return urllib.parse.unquote(match.group(1))
     return "FabFilter Pro-Q 3"
-
