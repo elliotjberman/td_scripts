@@ -129,6 +129,13 @@ class FabFilterProQPhaseTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 live_set.write(document, Path(temp_dir) / "bad.als", "<Ableton></Broken>")
 
+    def test_live_set_write_refuses_duplicate_sibling_ids(self) -> None:
+        xml = "<Ableton><Devices><PluginDevice Id=\"0\" /><PluginDevice Id=\"0\" /></Devices></Ableton>"
+        with tempfile.TemporaryDirectory() as temp_dir:
+            document = live_set.LiveSetDocument(Path("input.als"), "<Ableton />", False)
+            with self.assertRaisesRegex(ValueError, "duplicate child Id"):
+                live_set.write(document, Path(temp_dir) / "bad.als", xml)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -49,9 +49,26 @@ def write(document: LiveSetDocument, output_path: Path, xml: str) -> None:
 
 def validate_xml(xml: str) -> None:
     try:
-        ET.fromstring(xml)
+        root = ET.fromstring(xml)
     except ET.ParseError as exc:
         raise ValueError(f"Ableton XML is not well-formed: {exc}") from exc
+    duplicate = _first_duplicate_child_id(root)
+    if duplicate:
+        parent, child_id = duplicate
+        raise ValueError(f"Ableton XML has duplicate child Id {child_id!r} under <{parent}>.")
+
+
+def _first_duplicate_child_id(root: ET.Element) -> tuple[str, str] | None:
+    for parent in root.iter():
+        seen: set[str] = set()
+        for child in list(parent):
+            child_id = child.attrib.get("Id")
+            if child_id is None:
+                continue
+            if child_id in seen:
+                return parent.tag, child_id
+            seen.add(child_id)
+    return None
 
 
 def backup(path: Path) -> Path:
