@@ -2,14 +2,8 @@
 
 from __future__ import annotations
 
-import argparse
 import dataclasses
-import json
 import re
-import sys
-from pathlib import Path
-
-from . import live_set
 
 
 CURVE_BENDER_RE = re.compile(r"(Curve%20Bender|Curve Bender)", re.I)
@@ -58,16 +52,6 @@ class CurveBenderPlan:
 
 def is_curve_bender_block(block: str) -> bool:
     return CURVE_BENDER_RE.search(block) is not None
-
-
-def inspect_file(path: Path) -> list[CurveBenderPlan]:
-    document = live_set.read(path)
-    plans: list[CurveBenderPlan] = []
-    for start, end in live_set.iter_plugin_device_ranges(document.xml):
-        block = document.xml[start:end]
-        if is_curve_bender_block(block):
-            plans.append(plan_block(block))
-    return plans
 
 
 def plan_block(block: str) -> CurveBenderPlan:
@@ -196,51 +180,3 @@ def _tag_value(chunk: str, tag: str) -> str | None:
 def detect_plugin_name(block: str) -> str:
     match = re.search(r"<Name\b[^>]*\bValue=\"([^\"]*Curve Bender[^\"]*)\"", block, re.I)
     return match.group(1) if match else "UAD Chandler Limited Curve Bender"
-
-
-def plan_to_dict(plan: CurveBenderPlan) -> dict[str, object]:
-    return {
-        "plugin_name": plan.plugin_name,
-        "linked": plan.linked,
-        "mid_side": plan.mid_side,
-        "bands": [dataclasses.asdict(band) for band in plan.bands],
-        "skipped": plan.skipped,
-    }
-
-
-def format_plan(index: int, plan: CurveBenderPlan) -> str:
-    lines = [
-        f"[{index}] {plan.plugin_name}",
-        f"  linked={plan.linked} mid_side={plan.mid_side}",
-    ]
-    for band in plan.bands:
-        parts = [band.channel, band.kind, f"{band.frequency_hz:g} Hz"]
-        if band.gain_db is not None:
-            parts.append(f"{band.gain_db:+g} dB")
-        if band.q is not None:
-            parts.append(f"Q {band.q:g}")
-        if band.slope_db_oct is not None:
-            parts.append(f"{band.slope_db_oct} dB/oct")
-        lines.append("  " + " | ".join(parts) + f" ({band.source})")
-    for skipped in plan.skipped:
-        lines.append(f"  skipped: {skipped}")
-    return "\n".join(lines)
-
-
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Inspect UAD Chandler Curve Bender EQ settings in an Ableton set.")
-    parser.add_argument("session", type=Path, help="Path to an Ableton .als file.")
-    parser.add_argument("--json", action="store_true", help="Print a machine-readable JSON report.")
-    args = parser.parse_args(argv)
-
-    try:
-        plans = inspect_file(args.session)
-    except Exception as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        return 1
-
-    if args.json:
-        print(json.dumps([plan_to_dict(plan) for plan in plans], indent=2))
-    else:
-        print("\n\n".join(format_plan(index + 1, plan) for index, plan in enumerate(plans)))
-    return 2 if not plans else 0

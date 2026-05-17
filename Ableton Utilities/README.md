@@ -70,23 +70,12 @@ Code layout:
 - `ableton_utilities/curve_bender.py`: UAD Curve Bender parameter parsing and conversion planning.
 - `ableton_utilities/cli.py`: command-line reporting and write orchestration.
 
-## UAD Chandler Curve Bender Inspection
+## UAD Chandler Curve Bender Conversion
 
-`inspect_curve_bender.py` reads UAD Chandler Limited Curve Bender VST3
-parameters that Ableton exposes in the XML and turns them into a normalized EQ
-plan.
-
-Example:
-
-```powershell
-python "Ableton Utilities\inspect_curve_bender.py" "C:\path\to\Song.als"
-python "Ableton Utilities\inspect_curve_bender.py" "C:\path\to\Song.als" --json
-```
-
-`write_curve_bender_to_proq.py` is the first Pro-Q writer proof. It expects one
-Curve Bender and at least one Pro-Q 3 in the set, then writes the Curve Bender
-plan into the first Pro-Q 3 instance as zero-latency bands. It does not remove
-or replace the original Curve Bender device yet.
+`write_curve_bender_to_proq.py` writes Curve Bender plans into Pro-Q 3 instances
+as zero-latency bands. It pairs devices by XML order: Curve Bender 1 writes into
+Pro-Q 1, Curve Bender 2 writes into Pro-Q 2, and so on. It does not remove or
+replace the original Curve Bender devices yet.
 
 ```powershell
 python "Ableton Utilities\write_curve_bender_to_proq.py" "C:\path\to\Song.als"

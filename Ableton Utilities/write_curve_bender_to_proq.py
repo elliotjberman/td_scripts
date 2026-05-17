@@ -11,43 +11,48 @@ from ableton_utilities import curve_bender, live_set, proq3_vst3
 
 def convert_file(input_path: Path, output_path: Path | None = None) -> Path:
     document = live_set.read(input_path)
-    plan = _single_curve_bender_plan(document.xml)
-    if plan.skipped:
-        raise ValueError("Curve Bender plan has skipped values: " + "; ".join(plan.skipped))
+    plans = _curve_bender_plans(document.xml)
+    proq_ranges = _proq_ranges(document.xml)
+    if not plans:
+        raise ValueError("No Curve Bender devices found.")
+    if len(proq_ranges) < len(plans):
+        raise ValueError(f"Found {len(plans)} Curve Benders but only {len(proq_ranges)} Pro-Q 3 devices.")
 
-    proq_range = _first_proq_range(document.xml)
-    start, end = proq_range
-    block = document.xml[start:end]
-    result = proq3_vst3.patch_block_bands(block, plan.bands, "zero_latency")
-    if result.warning:
-        raise ValueError(result.warning)
+    replacements: list[tuple[int, int, str]] = []
+    for index, plan in enumerate(plans):
+        if plan.skipped:
+            raise ValueError(f"Curve Bender {index + 1} has skipped values: " + "; ".join(plan.skipped))
+        start, end = proq_ranges[index]
+        result = proq3_vst3.patch_block_bands(document.xml[start:end], plan.bands, "zero_latency")
+        if result.warning:
+            raise ValueError(result.warning)
+        replacements.append((start, end, result.block))
 
     output = output_path or input_path.with_name(f"{input_path.stem}_curve_bender_to_proq{input_path.suffix}")
-    xml = live_set.replace_ranges(document.xml, [(start, end, result.block)])
+    xml = live_set.replace_ranges(document.xml, replacements)
     live_set.write(document, output, xml)
     return output
 
 
-def _single_curve_bender_plan(xml: str) -> curve_bender.CurveBenderPlan:
+def _curve_bender_plans(xml: str) -> list[curve_bender.CurveBenderPlan]:
     plans: list[curve_bender.CurveBenderPlan] = []
     for start, end in live_set.iter_plugin_device_ranges(xml):
         block = xml[start:end]
         if curve_bender.is_curve_bender_block(block):
             plans.append(curve_bender.plan_block(block))
-    if len(plans) != 1:
-        raise ValueError(f"Expected exactly one Curve Bender device; found {len(plans)}.")
-    return plans[0]
+    return plans
 
 
-def _first_proq_range(xml: str) -> tuple[int, int]:
+def _proq_ranges(xml: str) -> list[tuple[int, int]]:
+    ranges: list[tuple[int, int]] = []
     for start, end in live_set.iter_plugin_device_ranges(xml):
         if proq3_vst3.is_proq3_block(xml[start:end]):
-            return start, end
-    raise ValueError("No FabFilter Pro-Q 3 device found.")
+            ranges.append((start, end))
+    return ranges
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Write one Curve Bender plan into the first Pro-Q 3 in an Ableton set.")
+    parser = argparse.ArgumentParser(description="Write Curve Bender plans into Pro-Q 3 instances in an Ableton set.")
     parser.add_argument("session", type=Path, help="Path to an Ableton .als file.")
     parser.add_argument("--output", type=Path, help="Output .als path. Defaults to *_curve_bender_to_proq.als.")
     args = parser.parse_args(argv)
