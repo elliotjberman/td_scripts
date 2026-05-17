@@ -66,7 +66,35 @@ Code layout:
 
 - `ableton_utilities/live_set.py`: gzip/XML file handling and PluginDevice traversal.
 - `ableton_utilities/proq3_vst3.py`: FabFilter Pro-Q 3 VST3 `ProcessorState` validation and byte patching.
+- `ableton_utilities/curve_bender.py`: UAD Curve Bender parameter parsing and conversion planning.
 - `ableton_utilities/cli.py`: command-line reporting and write orchestration.
+
+## UAD Chandler Curve Bender Inspection
+
+`inspect_curve_bender.py` reads UAD Chandler Limited Curve Bender VST3
+parameters that Ableton exposes in the XML and turns them into a normalized EQ
+plan. It does not write replacement Pro-Q bands yet.
+
+Example:
+
+```powershell
+python "Ableton Utilities\inspect_curve_bender.py" "C:\path\to\Song.als"
+python "Ableton Utilities\inspect_curve_bender.py" "C:\path\to\Song.als" --json
+```
+
+Current mapping rules:
+
+- Linked Curve Bender channels become stereo Pro-Q target bands.
+- Mid/side Curve Bender channels become Mid and Side target bands.
+- Unlinked non-mid/side channels currently map left to Mid and right to Side,
+  matching the low-latency live-set workflow.
+- Zero-gain EQ bands are skipped instead of creating disabled or phantom bands.
+- Normal bell/shelf Q starts at `0.50`; high-Q / `x1.5` starts at `0.75`.
+- High-pass and low-pass filters are represented as `6 dB/oct` filters.
+
+The frequency maps are intentionally narrow for now. Unknown stepped knob
+positions are reported as skipped values rather than guessed. Add paired fixture
+sets before expanding those maps.
 
 ## Plan for Vendor Blob Editing
 
