@@ -8,6 +8,7 @@ import gzip
 import re
 import shutil
 import tempfile
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Iterable
 
@@ -31,6 +32,7 @@ def read(path: Path) -> LiveSetDocument:
 
 
 def write(document: LiveSetDocument, output_path: Path, xml: str) -> None:
+    validate_xml(xml)
     raw = xml.encode("utf-8")
     if document.was_gzip:
         raw = gzip.compress(raw)
@@ -43,6 +45,13 @@ def write(document: LiveSetDocument, output_path: Path, xml: str) -> None:
         handle.write(raw)
 
     tmp_path.replace(output_path)
+
+
+def validate_xml(xml: str) -> None:
+    try:
+        ET.fromstring(xml)
+    except ET.ParseError as exc:
+        raise ValueError(f"Ableton XML is not well-formed: {exc}") from exc
 
 
 def backup(path: Path) -> Path:
@@ -83,4 +92,3 @@ def replace_ranges(xml: str, replacements: Iterable[tuple[int, int, str]]) -> st
         cursor = end
     parts.append(xml[cursor:])
     return "".join(parts)
-

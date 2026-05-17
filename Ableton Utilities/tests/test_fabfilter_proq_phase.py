@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from ableton_utilities import cli, proq3_vst3  # noqa: E402
+from ableton_utilities import cli, live_set, proq3_vst3  # noqa: E402
 
 
 def make_processor(mode: str) -> bytes:
@@ -121,6 +122,12 @@ class FabFilterProQPhaseTests(unittest.TestCase):
         state = proq3_vst3.state_from_block(result.block)
         self.assertEqual(state.mode(), "zero_latency")
         self.assertEqual(state.list_bands()[0].channel, "side")
+
+    def test_live_set_write_refuses_invalid_xml(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            document = live_set.LiveSetDocument(Path("input.als"), "<Ableton />", False)
+            with self.assertRaises(ValueError):
+                live_set.write(document, Path(temp_dir) / "bad.als", "<Ableton></Broken>")
 
 
 if __name__ == "__main__":
