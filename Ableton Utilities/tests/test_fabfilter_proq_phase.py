@@ -136,6 +136,20 @@ class FabFilterProQPhaseTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "duplicate child Id"):
                 live_set.write(document, Path(temp_dir) / "bad.als", xml)
 
+    def test_live_set_write_refuses_low_next_pointee_id(self) -> None:
+        xml = """
+<Ableton>
+  <LiveSet>
+    <NextPointeeId Value="10" />
+    <Tracks><AudioTrack Id="12" /></Tracks>
+  </LiveSet>
+</Ableton>
+"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            document = live_set.LiveSetDocument(Path("input.als"), "<Ableton />", False)
+            with self.assertRaisesRegex(ValueError, "NextPointeeId is too low"):
+                live_set.write(document, Path(temp_dir) / "bad.als", xml)
+
 
 if __name__ == "__main__":
     unittest.main()

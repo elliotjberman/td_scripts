@@ -56,6 +56,10 @@ def validate_xml(xml: str) -> None:
     if duplicate:
         parent, child_id = duplicate
         raise ValueError(f"Ableton XML has duplicate child Id {child_id!r} under <{parent}>.")
+    pointee_error = _next_pointee_error(root)
+    if pointee_error:
+        next_id, max_id = pointee_error
+        raise ValueError(f"NextPointeeId is too low: {next_id} must be bigger than {max_id}.")
 
 
 def _first_duplicate_child_id(root: ET.Element) -> tuple[str, str] | None:
@@ -69,6 +73,25 @@ def _first_duplicate_child_id(root: ET.Element) -> tuple[str, str] | None:
                 return parent.tag, child_id
             seen.add(child_id)
     return None
+
+
+def _next_pointee_error(root: ET.Element) -> tuple[int, int] | None:
+    next_node = root.find(".//NextPointeeId")
+    if next_node is None:
+        return None
+    value = next_node.attrib.get("Value")
+    if value is None:
+        return None
+    next_id = int(value)
+    max_id = max(_numeric_ids(root), default=-1)
+    return (next_id, max_id) if next_id <= max_id else None
+
+
+def _numeric_ids(root: ET.Element) -> Iterable[int]:
+    for node in root.iter():
+        value = node.attrib.get("Id")
+        if value and value.isdigit():
+            yield int(value)
 
 
 def backup(path: Path) -> Path:
