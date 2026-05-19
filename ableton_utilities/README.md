@@ -10,9 +10,9 @@ Pro-Q plugin devices and changes the processing mode.
 Examples:
 
 ```powershell
-python "Ableton Utilities\switch_fabfilter_proq_phase.py" "C:\path\to\Song.als" --mode zero-latency
-python "Ableton Utilities\switch_fabfilter_proq_phase.py" "C:\path\to\Song.als" --mode natural-phase --write
-python "Ableton Utilities\switch_fabfilter_proq_phase.py" "C:\path\to\Song.als" --mode zero-latency --output "C:\path\to\Song - zero latency.als"
+python "ableton_utilities\switch_fabfilter_proq_phase.py" "C:\path\to\Song.als" --mode zero-latency
+python "ableton_utilities\switch_fabfilter_proq_phase.py" "C:\path\to\Song.als" --mode natural-phase --write
+python "ableton_utilities\switch_fabfilter_proq_phase.py" "C:\path\to\Song.als" --mode zero-latency --output "C:\path\to\Song - zero latency.als"
 ```
 
 Without `--write` or `--output`, the script only reports what it would change.
@@ -79,8 +79,8 @@ Pro-Q 1, Curve Bender 2 writes into Pro-Q 2, and so on. It does not remove or
 replace the original Curve Bender devices yet.
 
 ```powershell
-python "Ableton Utilities\write_curve_bender_to_proq.py" "C:\path\to\Song.als"
-python "Ableton Utilities\write_curve_bender_to_proq.py" "C:\path\to\Song.als" --output "C:\path\to\Song - proq.als"
+python "ableton_utilities\write_curve_bender_to_proq.py" "C:\path\to\Song.als"
+python "ableton_utilities\write_curve_bender_to_proq.py" "C:\path\to\Song.als" --output "C:\path\to\Song - proq.als"
 ```
 
 Current mapping rules:
@@ -112,9 +112,9 @@ paired fixture sets before expanding those maps.
 Saturn 2 VST3 devices and changes the quality mode.
 
 ```powershell
-python "Ableton Utilities\switch_fabfilter_saturn_quality.py" "C:\path\to\Song.als" --mode high-quality
-python "Ableton Utilities\switch_fabfilter_saturn_quality.py" "C:\path\to\Song.als" --mode super-high-quality --write
-python "Ableton Utilities\switch_fabfilter_saturn_quality.py" "C:\path\to\Song.als" --mode normal --output "C:\path\to\Song - normal saturn.als"
+python "ableton_utilities\switch_fabfilter_saturn_quality.py" "C:\path\to\Song.als" --mode high-quality
+python "ableton_utilities\switch_fabfilter_saturn_quality.py" "C:\path\to\Song.als" --mode super-high-quality --write
+python "ableton_utilities\switch_fabfilter_saturn_quality.py" "C:\path\to\Song.als" --mode normal --output "C:\path\to\Song - normal saturn.als"
 ```
 
 Supported mode names:
