@@ -67,6 +67,7 @@ Code layout:
 - `ableton_utilities/live_set.py`: gzip/XML file handling and PluginDevice traversal.
 - `ableton_utilities/proq3_vst3.py`: FabFilter Pro-Q 3 VST3 `ProcessorState` validation and byte patching.
 - `ableton_utilities/proq3/state.py`: Pro-Q 3 state model with band list/replace/add/update/delete operations.
+- `ableton_utilities/saturn2/vst3.py`: FabFilter Saturn 2 VST3 quality-mode validation and byte patching.
 - `ableton_utilities/curve_bender.py`: UAD Curve Bender parameter parsing and conversion planning.
 - `ableton_utilities/cli.py`: command-line reporting and write orchestration.
 
@@ -104,6 +105,35 @@ The Pro-Q writer is structured through `ProQ3State`, which owns the binary
 The frequency maps are intentionally narrow for now. Unknown stepped Curve
 Bender knob positions are reported as skipped values rather than guessed. Add
 paired fixture sets before expanding those maps.
+
+## FabFilter Saturn 2 Quality Mode
+
+`switch_fabfilter_saturn_quality.py` scans an Ableton `.als` file for FabFilter
+Saturn 2 VST3 devices and changes the quality mode.
+
+```powershell
+python "Ableton Utilities\switch_fabfilter_saturn_quality.py" "C:\path\to\Song.als" --mode high-quality
+python "Ableton Utilities\switch_fabfilter_saturn_quality.py" "C:\path\to\Song.als" --mode super-high-quality --write
+python "Ableton Utilities\switch_fabfilter_saturn_quality.py" "C:\path\to\Song.als" --mode normal --output "C:\path\to\Song - normal saturn.als"
+```
+
+Supported mode names:
+
+- `normal`
+- `high-quality`
+- `super-high-quality` / `highest-quality`
+
+A three-instance fixture in `codex_test.als` showed that Saturn 2 stores this
+mode as a four-byte float in the `ProcessorState` blob:
+
+- `ProcessorState`: quality float at offset `2804`.
+- Normal: `00000000`.
+- High Quality: `0000803F`.
+- Super High Quality: `00000040`.
+
+The script only writes when the Saturn 2 blob matches the known-safe VST3 shape:
+exact `ProcessorState` length, expected header, expected tail, and one of the
+known quality values at offset `2804`.
 
 ## Plan for Vendor Blob Editing
 
