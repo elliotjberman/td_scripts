@@ -11,11 +11,7 @@ from ableton_utilities import curve_bender, live_set, proq3_vst3
 
 def convert_file(input_path: Path, output_path: Path | None = None) -> Path:
     document = live_set.read(input_path)
-    curve_benders = _curve_benders(document.xml)
-    plans = [plan for _block, plan in curve_benders]
-    issues = _state_consistency_issues(curve_benders)
-    if issues:
-        raise ValueError("; ".join(issues))
+    plans = _curve_bender_plans(document.xml)
     proq_ranges = _proq_ranges(document.xml)
     if not plans:
         raise ValueError("No Curve Bender devices found.")
@@ -38,32 +34,13 @@ def convert_file(input_path: Path, output_path: Path | None = None) -> Path:
     return output
 
 
-def _curve_benders(xml: str) -> list[tuple[str, curve_bender.CurveBenderPlan]]:
-    devices: list[tuple[str, curve_bender.CurveBenderPlan]] = []
+def _curve_bender_plans(xml: str) -> list[curve_bender.CurveBenderPlan]:
+    plans: list[curve_bender.CurveBenderPlan] = []
     for start, end in live_set.iter_plugin_device_ranges(xml):
         block = xml[start:end]
         if curve_bender.is_curve_bender_block(block):
-            devices.append((block, curve_bender.plan_block(block)))
-    return devices
-
-
-def _state_consistency_issues(devices: list[tuple[str, curve_bender.CurveBenderPlan]]) -> list[str]:
-    by_state: dict[str, set[tuple[object, ...]]] = {}
-    indexes: dict[str, list[int]] = {}
-    for index, (block, plan) in enumerate(devices, start=1):
-        fingerprint = curve_bender.processor_state_fingerprint(block)
-        if not fingerprint:
-            continue
-        by_state.setdefault(fingerprint, set()).add(curve_bender.plan_signature(plan))
-        indexes.setdefault(fingerprint, []).append(index)
-
-    return [
-        "Curve Benders "
-        + ", ".join(str(index) for index in indexes[fingerprint])
-        + " share identical private UAD state but expose different host parameters"
-        for fingerprint, signatures in by_state.items()
-        if len(signatures) > 1
-    ]
+            plans.append(curve_bender.plan_block(block))
+    return plans
 
 
 def _proq_ranges(xml: str) -> list[tuple[int, int]]:

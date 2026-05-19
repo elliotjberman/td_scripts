@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import dataclasses
-import hashlib
 import re
 
 
 CURVE_BENDER_RE = re.compile(r"(Curve%20Bender|Curve Bender)", re.I)
 PARAM_RE = re.compile(r"<PluginFloatParameter\b[^>]*>(.*?)</PluginFloatParameter>", re.S)
-PROCESSOR_STATE_RE = re.compile(r"<ProcessorState>\s*([0-9A-Fa-f\s]+?)\s*</ProcessorState>", re.I | re.S)
 
 GAIN_DB_RANGE = 10.0
 HIGH_Q_GAIN_MULTIPLIER = 1.5
@@ -59,32 +57,6 @@ def is_curve_bender_block(block: str) -> bool:
 def plan_block(block: str) -> CurveBenderPlan:
     params = extract_params(block)
     return plan_params(params, detect_plugin_name(block))
-
-
-def processor_state_fingerprint(block: str) -> str | None:
-    match = PROCESSOR_STATE_RE.search(block)
-    if not match:
-        return None
-    state = "".join(match.group(1).split())
-    return hashlib.sha256(state.encode()).hexdigest()
-
-
-def plan_signature(plan: CurveBenderPlan) -> tuple[object, ...]:
-    return (
-        plan.linked,
-        plan.mid_side,
-        tuple(
-            (
-                band.channel,
-                band.kind,
-                round(band.frequency_hz, 3),
-                round(band.gain_db or 0.0, 3),
-                band.q,
-                band.slope_db_oct,
-            )
-            for band in plan.bands
-        ),
-    )
 
 
 def extract_params(block: str) -> dict[str, float]:
