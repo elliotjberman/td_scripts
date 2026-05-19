@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from ableton_utilities import curve_bender  # noqa: E402
+import write_curve_bender_to_proq  # noqa: E402
 
 
 def param(name: str, value: float, parameter_id: int = 0) -> str:
@@ -22,13 +23,18 @@ def param(name: str, value: float, parameter_id: int = 0) -> str:
 """
 
 
-def block(params: list[str]) -> str:
+def block(params: list[str], processor_state: str = "") -> str:
     return f"""
 <PluginDevice>
   <SourceContext>
     <BrowserContentPath Value="query:Plugins#VST3:Universal%20Audio:UAD%20Chandler%20Limited%20Curve%20Bender" />
   </SourceContext>
   <Name Value="UAD Chandler Limited Curve Bender" />
+  <PluginDesc>
+    <Vst3Preset>
+      <ProcessorState>{processor_state}</ProcessorState>
+    </Vst3Preset>
+  </PluginDesc>
   <ParameterList>
     {"".join(params)}
   </ParameterList>
@@ -87,6 +93,32 @@ class CurveBenderTests(unittest.TestCase):
         self.assertEqual(plan.bands[0].kind, "bell")
         self.assertAlmostEqual(plan.bands[0].gain_db, 3.75)
         self.assertEqual(plan.bands[0].q, 0.75)
+
+    def test_detects_same_uad_state_with_different_host_params(self) -> None:
+        first = block(
+            [
+                param("Link Channels", 1),
+                param("Left/Mid In", 1),
+                param("L Bass Frequency", 0.571428597),
+                param("L Bass Gain", 0.6),
+            ],
+            "ABCD",
+        )
+        second = block(
+            [
+                param("Link Channels", 1),
+                param("Left/Mid In", 1),
+                param("L Bass Frequency", 0.571428597),
+                param("L Bass Gain", 0.7),
+            ],
+            "ABCD",
+        )
+        devices = [(first, curve_bender.plan_block(first)), (second, curve_bender.plan_block(second))]
+
+        issues = write_curve_bender_to_proq._state_consistency_issues(devices)
+
+        self.assertEqual(len(issues), 1)
+        self.assertIn("identical private UAD state", issues[0])
 
 
 if __name__ == "__main__":
