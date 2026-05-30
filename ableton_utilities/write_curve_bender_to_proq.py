@@ -3,62 +3,207 @@
 from __future__ import annotations
 
 import argparse
+import dataclasses
+import re
 import sys
 from pathlib import Path
 
 from ableton_utilities import curve_bender, live_set, proq3_vst3
 
 
-def convert_file(input_path: Path, output_path: Path | None = None) -> Path:
-    document = live_set.read(input_path)
-    plans = _curve_bender_plans(document.xml)
-    proq_ranges = _proq_ranges(document.xml)
-    if not plans:
-        raise ValueError("No Curve Bender devices found.")
-    if len(proq_ranges) < len(plans):
-        raise ValueError(f"Found {len(plans)} Curve Benders but only {len(proq_ranges)} Pro-Q 3 devices.")
+@dataclasses.dataclass(frozen=True)
+class ConversionReport:
+    curve_bender_index: int
+    proq_index: int
+    created_proq: bool
+    bands_written: int
+    curve_bender_disabled: bool
 
-    replacements: list[tuple[int, int, str]] = []
-    for index, plan in enumerate(plans):
-        if plan.skipped:
-            raise ValueError(f"Curve Bender {index + 1} has skipped values: " + "; ".join(plan.skipped))
-        start, end = proq_ranges[index]
-        result = proq3_vst3.patch_block_bands(document.xml[start:end], plan.bands, "zero_latency")
-        if result.warning:
-            raise ValueError(result.warning)
-        replacements.append((start, end, result.block))
+
+def convert_file(
+    input_path: Path,
+    output_path: Path | None = None,
+    proq_template_path: Path | None = None,
+) -> Path:
+    document = live_set.read(input_path)
+    template_xml = live_set.read(proq_template_path).xml if proq_template_path else None
+    xml, reports = patch_xml(document.xml, template_xml)
+    if not reports:
+        raise ValueError("No Curve Bender devices found.")
 
     output = output_path or input_path.with_name(f"{input_path.stem}_curve_bender_to_proq{input_path.suffix}")
-    xml = live_set.replace_ranges(document.xml, replacements)
     live_set.write(document, output, xml)
     return output
 
 
-def _curve_bender_plans(xml: str) -> list[curve_bender.CurveBenderPlan]:
-    plans: list[curve_bender.CurveBenderPlan] = []
+def patch_xml(xml: str, template_xml: str | None = None) -> tuple[str, list[ConversionReport]]:
+    devices = _devices(xml)
+    template = _proq_template_block(xml) or (template_xml and _proq_template_block(template_xml))
+    reports: list[ConversionReport] = []
+    replacements: list[tuple[int, int, str]] = []
+    used_proqs: set[int] = set()
+    next_plugin_ids: dict[tuple[int, int] | None, int] = {}
+    next_id: int | None = None
+
+    for curve_index, device in enumerate((item for item in devices if item.kind == "curve_bender"), start=1):
+        plan = curve_bender.plan_block(xml[device.start : device.end])
+        if plan.skipped:
+            raise ValueError(f"Curve Bender {curve_index} has skipped values: " + "; ".join(plan.skipped))
+
+        target = _nearest_proq_in_chain(device, devices, used_proqs)
+        created_proq = target is None
+        if created_proq:
+            if template is None:
+                raise ValueError(f"No Pro-Q 3 target or clone template found for Curve Bender {curve_index}.")
+            if next_id is None:
+                next_id = live_set.next_pointee_id(xml)
+            plugin_id = next_plugin_ids.get(device.devices_list)
+            if plugin_id is None:
+                plugin_id = _next_plugin_device_id(xml, device.devices_list)
+            next_plugin_ids[device.devices_list] = plugin_id + 1
+            proq_block, next_id = live_set.remap_cloned_plugin_device(template, plugin_id, next_id)
+            target_index = _next_proq_index(devices, reports)
+            replace_start = replace_end = device.end
+        else:
+            used_proqs.add(target.device_index)
+            proq_block = xml[target.start : target.end]
+            target_index = target.plugin_type_index
+            replace_start, replace_end = target.start, target.end
+
+        result = proq3_vst3.patch_block_bands(proq_block, plan.bands, "zero_latency")
+        if result.warning:
+            raise ValueError(result.warning)
+
+        disabled_block = _disable_plugin_device(xml[device.start : device.end])
+        replacements.append((replace_start, replace_end, result.block))
+        replacements.append((device.start, device.end, disabled_block))
+        reports.append(
+            ConversionReport(
+                curve_bender_index=curve_index,
+                proq_index=target_index,
+                created_proq=created_proq,
+                bands_written=len(plan.bands),
+                curve_bender_disabled=disabled_block != xml[device.start : device.end],
+            )
+        )
+
+    replacements.sort(key=lambda item: item[0])
+    patched = live_set.replace_ranges(xml, replacements)
+    if next_id is not None and next_id != live_set.next_pointee_id(xml):
+        patched = live_set.set_next_pointee_id(patched, next_id)
+    return patched, reports
+
+
+@dataclasses.dataclass(frozen=True)
+class _Device:
+    start: int
+    end: int
+    kind: str
+    device_index: int
+    plugin_type_index: int
+    chain: tuple[int, int] | None
+    container: tuple[int, int] | None
+    devices_list: tuple[int, int] | None
+
+
+def _devices(xml: str) -> list[_Device]:
+    chains = live_set.tag_ranges(xml, {"DeviceChain"})
+    containers = live_set.tag_ranges(xml, {"AudioTrack", "MidiTrack", "GroupTrack", "ReturnTrack", "MasterTrack"})
+    device_lists = live_set.tag_ranges(xml, {"Devices"})
+    counters = {"curve_bender": 0, "proq": 0}
+    devices: list[_Device] = []
+
     for start, end in live_set.iter_plugin_device_ranges(xml):
         block = xml[start:end]
+        kind = None
         if curve_bender.is_curve_bender_block(block):
-            plans.append(curve_bender.plan_block(block))
-    return plans
+            kind = "curve_bender"
+        elif proq3_vst3.is_proq3_block(block):
+            kind = "proq"
+        if kind is None:
+            continue
+
+        counters[kind] += 1
+        devices.append(
+            _Device(
+                start=start,
+                end=end,
+                kind=kind,
+                device_index=len(devices),
+                plugin_type_index=counters[kind],
+                chain=live_set.smallest_containing_range(chains, start, end),
+                container=live_set.smallest_containing_range(containers, start, end),
+                devices_list=live_set.smallest_containing_range(device_lists, start, end),
+            )
+        )
+    return devices
 
 
-def _proq_ranges(xml: str) -> list[tuple[int, int]]:
-    ranges: list[tuple[int, int]] = []
+def _nearest_proq_in_chain(
+    curve_device: _Device,
+    devices: list[_Device],
+    used_proqs: set[int],
+) -> _Device | None:
+    candidates = [
+        device
+        for device in devices
+        if device.kind == "proq" and device.chain == curve_device.chain and device.device_index not in used_proqs
+    ]
+    if not candidates:
+        candidates = [
+            device
+            for device in devices
+            if device.kind == "proq"
+            and device.container == curve_device.container
+            and device.device_index not in used_proqs
+        ]
+    if not candidates:
+        return None
+    return min(candidates, key=lambda item: (abs(item.device_index - curve_device.device_index), item.device_index < curve_device.device_index))
+
+
+def _proq_template_block(xml: str) -> str | None:
     for start, end in live_set.iter_plugin_device_ranges(xml):
-        if proq3_vst3.is_proq3_block(xml[start:end]):
-            ranges.append((start, end))
-    return ranges
+        block = xml[start:end]
+        if proq3_vst3.is_proq3_block(block):
+            return block
+    return None
+
+
+def _next_plugin_device_id(xml: str, devices_list: tuple[int, int] | None) -> int:
+    if devices_list is None:
+        return live_set.next_pointee_id(xml)
+    devices_xml = xml[devices_list[0] : devices_list[1]]
+    ids = [int(value) for value in re.findall(r"<PluginDevice\b[^>]*\bId=\"(\d+)\"", devices_xml)]
+    return max(ids, default=-1) + 1
+
+
+def _next_proq_index(devices: list[_Device], reports: list[ConversionReport]) -> int:
+    existing = [device.plugin_type_index for device in devices if device.kind == "proq"]
+    created = [report.proq_index for report in reports if report.created_proq]
+    return max([*existing, *created], default=0) + 1
+
+
+def _disable_plugin_device(block: str) -> str:
+    block = re.sub(
+        r"(<On>\s*(?:(?!</On>).)*?<Manual Value=\")true(\" />)",
+        r"\1false\2",
+        block,
+        count=1,
+        flags=re.S,
+    )
+    return re.sub(r"(<IsOn Value=\")true(\" />)", r"\1false\2", block, count=1)
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Write Curve Bender plans into Pro-Q 3 instances in an Ableton set.")
     parser.add_argument("session", type=Path, help="Path to an Ableton .als file.")
     parser.add_argument("--output", type=Path, help="Output .als path. Defaults to *_curve_bender_to_proq.als.")
+    parser.add_argument("--proq-template", type=Path, help="Ableton set to clone a Pro-Q 3 from when the input has none.")
     args = parser.parse_args(argv)
 
     try:
-        output = convert_file(args.session, args.output)
+        output = convert_file(args.session, args.output, args.proq_template)
     except Exception as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1

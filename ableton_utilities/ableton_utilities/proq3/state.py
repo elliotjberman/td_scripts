@@ -40,7 +40,13 @@ CHANNEL_CODES = {
 SLOPE_CODES = {
     6: 0.0,
     12: 1.0,
+    18: 2.0,
     24: 3.0,
+    30: 4.0,
+    36: 5.0,
+    48: 6.0,
+    72: 7.0,
+    96: 8.0,
 }
 
 
@@ -220,4 +226,3 @@ def _pack_floats(values: list[float]) -> bytes:
 
 def _unpack_floats(slot: bytes) -> list[float]:
     return [struct.unpack("<f", slot[index : index + 4])[0] for index in range(0, BAND_SIZE, 4)]
-

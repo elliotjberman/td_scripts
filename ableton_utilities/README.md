@@ -69,18 +69,21 @@ Code layout:
 - `ableton_utilities/proq3/state.py`: Pro-Q 3 state model with band list/replace/add/update/delete operations.
 - `ableton_utilities/saturn2/vst3.py`: FabFilter Saturn 2 VST3 quality-mode validation and byte patching.
 - `ableton_utilities/curve_bender.py`: UAD Curve Bender parameter parsing and conversion planning.
+- `ableton_utilities/live_prepare.py`: one-shot live-preparation pipeline.
 - `ableton_utilities/cli.py`: command-line reporting and write orchestration.
 
 ## UAD Chandler Curve Bender Conversion
 
 `write_curve_bender_to_proq.py` writes Curve Bender plans into Pro-Q 3 instances
-as zero-latency bands. It pairs devices by XML order: Curve Bender 1 writes into
-Pro-Q 1, Curve Bender 2 writes into Pro-Q 2, and so on. It does not remove or
-replace the original Curve Bender devices yet.
+as zero-latency bands. It first looks for the nearest unused Pro-Q in the same
+device chain or track container. If there is no local Pro-Q, it clones a known
+Pro-Q device block, remaps Ableton IDs, writes the translated bands into the
+clone, and leaves the original Curve Bender device disabled.
 
 ```powershell
 python "ableton_utilities\write_curve_bender_to_proq.py" "C:\path\to\Song.als"
 python "ableton_utilities\write_curve_bender_to_proq.py" "C:\path\to\Song.als" --output "C:\path\to\Song - proq.als"
+python "ableton_utilities\write_curve_bender_to_proq.py" "C:\path\to\Song.als" --proq-template "C:\path\to\TemplateWithProQ.als"
 ```
 
 Current mapping rules:
@@ -102,9 +105,8 @@ The Pro-Q writer is structured through `ProQ3State`, which owns the binary
 - `update_band(...)`
 - `delete_band(...)`
 
-The frequency maps are intentionally narrow for now. Unknown stepped Curve
-Bender knob positions are reported as skipped values rather than guessed. Add
-paired fixture sets before expanding those maps.
+Unknown stepped Curve Bender knob positions are reported as skipped values
+rather than guessed. Add paired fixture sets before expanding those maps.
 
 ## FabFilter Saturn 2 Quality Mode
 
@@ -134,6 +136,24 @@ mode as a four-byte float in the `ProcessorState` blob:
 The script only writes when the Saturn 2 blob matches the known-safe VST3 shape:
 exact `ProcessorState` length, expected header, expected tail, and one of the
 known quality values at offset `2804`.
+
+## One-Shot Live Preparation
+
+`live_prepare.py` combines the low-latency live-set transforms:
+
+- switches every FabFilter Pro-Q 3 VST3 device to zero latency;
+- switches every FabFilter Saturn 2 VST3 device to the requested quality mode
+  (`high-quality` by default);
+- converts UAD Chandler Curve Benders into Pro-Q bands and disables the original
+  Curve Bender devices.
+
+It refuses to overwrite the source set or an existing output file.
+
+```powershell
+python "ableton_utilities\live_prepare.py" "C:\path\to\Song.als" --output "C:\path\to\Song_live.als"
+python "ableton_utilities\live_prepare.py" "C:\path\to\Song.als" --saturn-mode super-high-quality --json
+python "ableton_utilities\live_prepare.py" "C:\path\to\Song.als" --proq-template "C:\path\to\TemplateWithProQ.als"
+```
 
 ## Plan for Vendor Blob Editing
 

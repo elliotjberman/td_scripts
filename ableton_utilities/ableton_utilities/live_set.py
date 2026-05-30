@@ -132,3 +132,67 @@ def replace_ranges(xml: str, replacements: Iterable[tuple[int, int, str]]) -> st
         cursor = end
     parts.append(xml[cursor:])
     return "".join(parts)
+
+
+def tag_ranges(xml: str, tags: set[str]) -> list[tuple[int, int]]:
+    ranges: list[tuple[int, int]] = []
+    stack: list[tuple[str, int]] = []
+    for match in XML_TAG_RE.finditer(xml):
+        closing, tag, _attrs, self_closing = match.groups()
+        if closing:
+            for index in range(len(stack) - 1, -1, -1):
+                open_tag, start = stack[index]
+                if open_tag != tag:
+                    continue
+                del stack[index:]
+                if tag in tags:
+                    ranges.append((start, match.end()))
+                break
+        elif not self_closing:
+            stack.append((tag, match.start()))
+    return ranges
+
+
+def smallest_containing_range(
+    ranges: list[tuple[int, int]],
+    start: int,
+    end: int,
+) -> tuple[int, int] | None:
+    containing = [item for item in ranges if item[0] <= start and end <= item[1]]
+    if not containing:
+        return None
+    return min(containing, key=lambda item: item[1] - item[0])
+
+
+def next_pointee_id(xml: str) -> int:
+    match = re.search(r'<NextPointeeId\b[^>]*\bValue="(\d+)"', xml)
+    if not match:
+        raise ValueError("No NextPointeeId was found.")
+    return int(match.group(1))
+
+
+def set_next_pointee_id(xml: str, next_id: int) -> str:
+    pattern = re.compile(r'(<NextPointeeId\b[^>]*\bValue=")(\d+)(")')
+    if not pattern.search(xml):
+        raise ValueError("No NextPointeeId was found.")
+    return pattern.sub(rf"\g<1>{next_id}\3", xml, count=1)
+
+
+def remap_cloned_plugin_device(block: str, plugin_device_id: int, first_global_id: int) -> tuple[str, int]:
+    next_id = first_global_id
+    block = re.sub(r'(<PluginDevice\b[^>]*\bId=")(\d+)(")', rf"\g<1>{plugin_device_id}\3", block, count=1)
+    if plugin_device_id >= next_id:
+        next_id = plugin_device_id + 1
+
+    id_map: dict[str, int] = {}
+
+    def replace_global_id(match: re.Match[str]) -> str:
+        nonlocal next_id
+        old_id = match.group(2)
+        if old_id not in id_map:
+            id_map[old_id] = next_id
+            next_id += 1
+        return f'{match.group(1)}{id_map[old_id]}{match.group(3)}'
+
+    pattern = re.compile(r'(<(?:Pointee|AutomationTarget|ModulationTarget)\b[^>]*\bId=")(\d+)(")')
+    return pattern.sub(replace_global_id, block), next_id

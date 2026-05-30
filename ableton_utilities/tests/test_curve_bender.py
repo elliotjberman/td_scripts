@@ -7,7 +7,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from ableton_utilities import curve_bender  # noqa: E402
+from ableton_utilities import curve_bender, live_set  # noqa: E402
+import write_curve_bender_to_proq  # noqa: E402
 
 
 def param(name: str, value: float, parameter_id: int = 0) -> str:
@@ -25,6 +26,8 @@ def param(name: str, value: float, parameter_id: int = 0) -> str:
 def block(params: list[str]) -> str:
     return f"""
 <PluginDevice>
+  <On><Manual Value="true" /></On>
+  <IsOn Value="true" />
   <SourceContext>
     <BrowserContentPath Value="query:Plugins#VST3:Universal%20Audio:UAD%20Chandler%20Limited%20Curve%20Bender" />
   </SourceContext>
@@ -34,6 +37,12 @@ def block(params: list[str]) -> str:
   </ParameterList>
 </PluginDevice>
 """
+
+
+def proq_block() -> str:
+    from test_fabfilter_proq_phase import make_block  # noqa: PLC0415
+
+    return make_block("natural_phase")
 
 
 class CurveBenderTests(unittest.TestCase):
@@ -87,6 +96,60 @@ class CurveBenderTests(unittest.TestCase):
         self.assertEqual(plan.bands[0].kind, "bell")
         self.assertAlmostEqual(plan.bands[0].gain_db, 3.75)
         self.assertEqual(plan.bands[0].q, 0.75)
+
+    def test_curve_bender_conversion_uses_nearest_proq_in_same_chain(self) -> None:
+        params = [
+            param("Link Channels", 1),
+            param("Left/Mid In", 1),
+            param("L High Pass", 0),
+            param("L Low Pass", 1),
+            param("L Bass Frequency", 0.571428597),
+            param("L Bass Gain", 0.6000000238),
+        ]
+        xml = f"""
+<Ableton>
+  <LiveSet><Tracks><AudioTrack Id="1"><DeviceChain><Devices>
+    {proq_block()}
+    {block(params)}
+    {proq_block()}
+  </Devices></DeviceChain></AudioTrack></Tracks></LiveSet>
+</Ableton>
+"""
+
+        _xml, reports = write_curve_bender_to_proq.patch_xml(xml)
+
+        self.assertEqual(len(reports), 1)
+        self.assertEqual(reports[0].proq_index, 2)
+        self.assertFalse(reports[0].created_proq)
+        self.assertTrue(reports[0].curve_bender_disabled)
+
+    def test_curve_bender_conversion_can_clone_proq_template(self) -> None:
+        params = [
+            param("Link Channels", 1, 1),
+            param("Left/Mid In", 1, 2),
+            param("L High Pass", 0, 3),
+            param("L Low Pass", 1, 4),
+            param("L Bass Frequency", 0.571428597, 5),
+            param("L Bass Gain", 0.6000000238, 6),
+        ]
+        xml = f"""
+<Ableton>
+  <LiveSet>
+    <NextPointeeId Value="100" />
+    <Tracks><AudioTrack Id="1"><DeviceChain><Devices>
+      {block(params)}
+    </Devices></DeviceChain></AudioTrack></Tracks>
+  </LiveSet>
+</Ableton>
+"""
+
+        patched, reports = write_curve_bender_to_proq.patch_xml(xml, proq_block())
+
+        self.assertEqual(len(reports), 1)
+        self.assertTrue(reports[0].created_proq)
+        self.assertIn("Pro-Q%203", patched)
+        self.assertIn('<NextPointeeId Value="100"', patched)
+        live_set.validate_xml(patched)
 
 
 if __name__ == "__main__":
