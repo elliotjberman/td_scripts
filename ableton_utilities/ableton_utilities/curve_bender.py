@@ -10,7 +10,6 @@ CURVE_BENDER_RE = re.compile(r"(Curve%20Bender|Curve Bender)", re.I)
 PARAM_RE = re.compile(r"<PluginFloatParameter\b[^>]*>(.*?)</PluginFloatParameter>", re.S)
 
 GAIN_DB_RANGE = 20.0
-HIGH_Q_GAIN_MULTIPLIER = 1.5
 NORMAL_BELL_Q = 0.50
 HIGH_BELL_Q = 1.00
 SHELF_Q = 0.20
@@ -182,8 +181,6 @@ def _add_eq_bands(
     for band_name in ("Bass", "Presence 2", "Presence 1", "Treble"):
         gain = _gain_db(params.get(f"{prefix} {band_name} Gain", 0.5))
         high_q = _on(params.get(f"{prefix} {band_name} Multiplier", 0.0))
-        if high_q:
-            gain *= HIGH_Q_GAIN_MULTIPLIER
         if abs(gain) < 0.01:
             continue
 

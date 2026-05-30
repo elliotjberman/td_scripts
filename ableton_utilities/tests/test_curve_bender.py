@@ -96,7 +96,7 @@ class CurveBenderTests(unittest.TestCase):
         self.assertEqual(len(plan.bands), 1)
         self.assertEqual(plan.bands[0].channel, "stereo")
         self.assertEqual(plan.bands[0].kind, "bell")
-        self.assertAlmostEqual(plan.bands[0].gain_db, 7.5)
+        self.assertAlmostEqual(plan.bands[0].gain_db, 5.0)
         self.assertEqual(plan.bands[0].q, 1.0)
 
     def test_curve_bender_conversion_uses_nearest_proq_in_same_chain(self) -> None:
