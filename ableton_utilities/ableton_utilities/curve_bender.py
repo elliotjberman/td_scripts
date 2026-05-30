@@ -13,6 +13,7 @@ GAIN_DB_RANGE = 10.0
 HIGH_Q_GAIN_MULTIPLIER = 1.5
 NORMAL_BELL_Q = 0.50
 HIGH_BELL_Q = 0.75
+SHELF_Q = 0.20
 FILTER_SLOPE_DB_OCT = 6
 
 HIGH_PASS_FREQS = {
@@ -190,7 +191,7 @@ def _add_eq_bands(
             continue
 
         kind = _eq_kind(params, prefix, band_name)
-        q = HIGH_BELL_Q if high_q else NORMAL_BELL_Q
+        q = _eq_q(kind, high_q)
         bands.append(PlannedBand(channel, f"{prefix} {band_name}", kind, frequency, round(gain, 3), q))
 
 
@@ -200,6 +201,12 @@ def _eq_kind(params: dict[str, float], prefix: str, band_name: str) -> str:
     if band_name == "Treble":
         return "bell" if _on(params.get(f"{prefix} Treble Peak/Shelf", 0.0)) else "high_shelf"
     return "bell"
+
+
+def _eq_q(kind: str, high_q: bool) -> float:
+    if kind in ("low_shelf", "high_shelf"):
+        return SHELF_Q
+    return HIGH_BELL_Q if high_q else NORMAL_BELL_Q
 
 
 def _lookup_frequency(

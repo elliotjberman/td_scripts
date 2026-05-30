@@ -76,6 +76,7 @@ class CurveBenderTests(unittest.TestCase):
         self.assertEqual(plan.bands[0].channel, "mid")
         self.assertEqual(plan.bands[0].kind, "low_shelf")
         self.assertAlmostEqual(plan.bands[0].gain_db, 1.0)
+        self.assertEqual(plan.bands[0].q, 0.2)
         self.assertEqual(plan.bands[1].channel, "side")
         self.assertEqual(plan.bands[1].kind, "high_pass")
 
