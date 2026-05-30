@@ -9,7 +9,7 @@ import re
 CURVE_BENDER_RE = re.compile(r"(Curve%20Bender|Curve Bender)", re.I)
 PARAM_RE = re.compile(r"<PluginFloatParameter\b[^>]*>(.*?)</PluginFloatParameter>", re.S)
 
-GAIN_DB_RANGE = 10.0
+GAIN_DB_RANGE = 20.0
 HIGH_Q_GAIN_MULTIPLIER = 1.5
 NORMAL_BELL_Q = 0.50
 HIGH_BELL_Q = 1.00

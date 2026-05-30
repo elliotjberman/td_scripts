@@ -92,6 +92,8 @@ Current mapping rules:
 - Mid/side Curve Bender channels become Mid and Side target bands.
 - Unlinked non-mid/side channels currently map left to Mid and right to Side,
   matching the low-latency live-set workflow.
+- Curve Bender normalized gain values are doubled when written to Pro-Q, based
+  on visual calibration against the plugin's response.
 - Zero-gain EQ bands are skipped instead of creating disabled or phantom bands.
 - Bell Q starts at `0.50`; high-Q / `x1.5` bell Q starts at `1.00`.
 - Shelf Q starts at `0.20`.
