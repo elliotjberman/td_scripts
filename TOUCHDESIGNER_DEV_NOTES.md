@@ -31,6 +31,10 @@ These are durable notes for future work on this repo.
 - Mapping data is per MIDI source wrapper. The user-facing entrypoint should be on the source wrapper, not only on a global manager.
 - The global manager can host shared modal UI, but it should edit a specific source's `mappings_json`.
 - Source wrappers should expose an `Open Mapper` pulse.
+- Keep setup/authoring behavior separate from performance runtime behavior.
+- Setup/authoring can discover Ableton tracks, create wrappers, add `TdaMIDI`, build UI, create envelopes, and bind parameters.
+- Performance runtime should only handle callbacks, maintain local note state, read existing mappings, and pulse mapped targets.
+- Do not run broad Ableton discovery, UI scans, or debug bridge behavior during performance unless explicitly enabled.
 - Note mapping UI should be sparse: show `*`, mapped notes, and notes that have actually fired. Do not show all 0-127 notes by default.
 - Incoming notes need immediate visual feedback: insert the note if missing, show velocity, and flash/fade the row quickly.
 - Multiple envelopes/route targets can map to the same note.
