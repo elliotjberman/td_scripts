@@ -29,7 +29,7 @@ class LivePrepareReport:
 def prepare_file(
     input_path: Path,
     output_path: Path,
-    saturn_mode: str = "high-quality",
+    saturn_mode: str = "normal",
     proq_template_path: Path | None = None,
 ) -> LivePrepareReport:
     if output_path == input_path:
@@ -79,7 +79,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Prepare an Ableton set for low-latency live use.")
     parser.add_argument("session", type=Path, help="Path to the source Ableton .als file.")
     parser.add_argument("--output", type=Path, help="Output .als path. Defaults to *_live.als.")
-    parser.add_argument("--saturn-mode", default="high-quality", help="Saturn target mode.")
+    parser.add_argument("--saturn-mode", default="normal", help="Saturn target mode.")
     parser.add_argument("--proq-template", type=Path, help="Ableton set to clone a Pro-Q from if this set has none.")
     parser.add_argument("--json", action="store_true", help="Print a machine-readable JSON report.")
     return parser

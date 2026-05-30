@@ -143,7 +143,7 @@ known quality values at offset `2804`.
 
 - switches every FabFilter Pro-Q 3 VST3 device to zero latency;
 - switches every FabFilter Saturn 2 VST3 device to the requested quality mode
-  (`high-quality` by default);
+  (`normal` by default for lowest latency);
 - converts UAD Chandler Curve Benders into Pro-Q bands and disables the original
   Curve Bender devices.
 
