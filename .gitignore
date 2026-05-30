@@ -134,3 +134,5 @@ Backup/
 big_kahuna/config.json
 *.mp4
 *.mov
+debug/codex_debugger/queue/
+codex_debugger/queue/
