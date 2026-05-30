@@ -79,6 +79,7 @@ class CurveBenderTests(unittest.TestCase):
         self.assertEqual(plan.bands[0].q, 0.2)
         self.assertEqual(plan.bands[1].channel, "side")
         self.assertEqual(plan.bands[1].kind, "high_pass")
+        self.assertEqual(plan.bands[1].q, 0.7)
 
     def test_linked_plan_uses_stereo_left_side(self) -> None:
         plan = curve_bender.plan_params(
@@ -96,7 +97,7 @@ class CurveBenderTests(unittest.TestCase):
         self.assertEqual(plan.bands[0].channel, "stereo")
         self.assertEqual(plan.bands[0].kind, "bell")
         self.assertAlmostEqual(plan.bands[0].gain_db, 3.75)
-        self.assertEqual(plan.bands[0].q, 0.75)
+        self.assertEqual(plan.bands[0].q, 1.0)
 
     def test_curve_bender_conversion_uses_nearest_proq_in_same_chain(self) -> None:
         params = [

@@ -93,9 +93,10 @@ Current mapping rules:
 - Unlinked non-mid/side channels currently map left to Mid and right to Side,
   matching the low-latency live-set workflow.
 - Zero-gain EQ bands are skipped instead of creating disabled or phantom bands.
-- Bell Q starts at `0.50`; high-Q / `x1.5` bell Q starts at `0.75`.
+- Bell Q starts at `0.50`; high-Q / `x1.5` bell Q starts at `1.00`.
 - Shelf Q starts at `0.20`.
-- High-pass and low-pass filters are represented as `6 dB/oct` filters.
+- High-pass and low-pass filters are represented as `6 dB/oct` filters with
+  Q `0.70`.
 
 The Pro-Q writer is structured through `ProQ3State`, which owns the binary
 `ProcessorState` and exposes band CRUD operations:

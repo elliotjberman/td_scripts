@@ -12,8 +12,9 @@ PARAM_RE = re.compile(r"<PluginFloatParameter\b[^>]*>(.*?)</PluginFloatParameter
 GAIN_DB_RANGE = 10.0
 HIGH_Q_GAIN_MULTIPLIER = 1.5
 NORMAL_BELL_Q = 0.50
-HIGH_BELL_Q = 0.75
+HIGH_BELL_Q = 1.00
 SHELF_Q = 0.20
+FILTER_Q = 0.70
 FILTER_SLOPE_DB_OCT = 6
 
 HIGH_PASS_FREQS = {
@@ -168,7 +169,7 @@ def _add_filters(
         name = f"{prefix} {label}"
         frequency = _lookup_frequency(frequencies, params.get(name), name, skipped)
         if frequency is not None:
-            bands.append(PlannedBand(channel, name, kind, frequency, slope_db_oct=FILTER_SLOPE_DB_OCT))
+            bands.append(PlannedBand(channel, name, kind, frequency, q=FILTER_Q, slope_db_oct=FILTER_SLOPE_DB_OCT))
 
 
 def _add_eq_bands(
