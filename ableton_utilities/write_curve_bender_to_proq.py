@@ -17,7 +17,7 @@ class ConversionReport:
     proq_index: int
     created_proq: bool
     bands_written: int
-    curve_bender_disabled: bool
+    curve_bender_removed: bool
 
 
 def convert_file(
@@ -74,21 +74,21 @@ def patch_xml(xml: str, template_xml: str | None = None) -> tuple[str, list[Conv
         if result.warning:
             raise ValueError(result.warning)
 
-        disabled_block = _disable_plugin_device(xml[device.start : device.end])
         replacements.append((replace_start, replace_end, result.block))
-        replacements.append((device.start, device.end, disabled_block))
+        replacements.append((device.start, device.end, ""))
         reports.append(
             ConversionReport(
                 curve_bender_index=curve_index,
                 proq_index=target_index,
                 created_proq=created_proq,
                 bands_written=len(plan.bands),
-                curve_bender_disabled=disabled_block != xml[device.start : device.end],
+                curve_bender_removed=True,
             )
         )
 
     replacements.sort(key=lambda item: item[0])
     patched = live_set.replace_ranges(xml, replacements)
+    patched = _remove_curve_bender_effective_names(patched)
     if next_id is not None and next_id != live_set.next_pointee_id(xml):
         patched = live_set.set_next_pointee_id(patched, next_id)
     return patched, reports
@@ -184,15 +184,15 @@ def _next_proq_index(devices: list[_Device], reports: list[ConversionReport]) ->
     return max([*existing, *created], default=0) + 1
 
 
-def _disable_plugin_device(block: str) -> str:
-    block = re.sub(
-        r"(<On>\s*(?:(?!</On>).)*?<Manual Value=\")true(\" />)",
-        r"\1false\2",
-        block,
-        count=1,
-        flags=re.S,
-    )
-    return re.sub(r"(<IsOn Value=\")true(\" />)", r"\1false\2", block, count=1)
+def _remove_curve_bender_effective_names(xml: str) -> str:
+    def replace(match: re.Match[str]) -> str:
+        value = match.group(2)
+        parts = [part.strip() for part in value.split("|")]
+        kept = [part for part in parts if "curve bender" not in part.lower()]
+        return f"{match.group(1)}{' | '.join(kept)}{match.group(3)}"
+
+    pattern = re.compile(r'(<EffectiveName\b[^>]*\bValue=")([^"]*Curve Bender[^"]*)(")', re.I)
+    return pattern.sub(replace, xml)
 
 
 def main(argv: list[str] | None = None) -> int:

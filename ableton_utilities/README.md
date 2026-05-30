@@ -78,7 +78,7 @@ Code layout:
 as zero-latency bands. It first looks for the nearest unused Pro-Q in the same
 device chain or track container. If there is no local Pro-Q, it clones a known
 Pro-Q device block, remaps Ableton IDs, writes the translated bands into the
-clone, and leaves the original Curve Bender device disabled.
+clone, and removes the original Curve Bender device.
 
 ```powershell
 python "ableton_utilities\write_curve_bender_to_proq.py" "C:\path\to\Song.als"
@@ -144,7 +144,7 @@ known quality values at offset `2804`.
 - switches every FabFilter Pro-Q 3 VST3 device to zero latency;
 - switches every FabFilter Saturn 2 VST3 device to the requested quality mode
   (`normal` by default for lowest latency);
-- converts UAD Chandler Curve Benders into Pro-Q bands and disables the original
+- converts UAD Chandler Curve Benders into Pro-Q bands and removes the original
   Curve Bender devices.
 
 It refuses to overwrite the source set or an existing output file.

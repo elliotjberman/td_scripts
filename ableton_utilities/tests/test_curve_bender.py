@@ -112,7 +112,9 @@ class CurveBenderTests(unittest.TestCase):
     {proq_block()}
     {block(params)}
     {proq_block()}
-  </Devices></DeviceChain></AudioTrack></Tracks></LiveSet>
+  </Devices></DeviceChain></AudioTrack></Tracks>
+  <EffectiveName Value="Pro-Q 3 | UAD Chandler Limited Curve Bender | Saturn 2" />
+  </LiveSet>
 </Ableton>
 """
 
@@ -121,7 +123,10 @@ class CurveBenderTests(unittest.TestCase):
         self.assertEqual(len(reports), 1)
         self.assertEqual(reports[0].proq_index, 2)
         self.assertFalse(reports[0].created_proq)
-        self.assertTrue(reports[0].curve_bender_disabled)
+        self.assertTrue(reports[0].curve_bender_removed)
+        self.assertNotIn("Curve%20Bender", _xml)
+        self.assertNotIn("UAD Chandler Limited Curve Bender", _xml)
+        self.assertIn('EffectiveName Value="Pro-Q 3 | Saturn 2"', _xml)
 
     def test_curve_bender_conversion_can_clone_proq_template(self) -> None:
         params = [
@@ -148,6 +153,7 @@ class CurveBenderTests(unittest.TestCase):
         self.assertEqual(len(reports), 1)
         self.assertTrue(reports[0].created_proq)
         self.assertIn("Pro-Q%203", patched)
+        self.assertNotIn("Curve%20Bender", patched)
         self.assertIn('<NextPointeeId Value="100"', patched)
         live_set.validate_xml(patched)
 
