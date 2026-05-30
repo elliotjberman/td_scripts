@@ -1,4 +1,4 @@
-# Ableton Utilities
+# Ableton File Utilities
 
 Small Python utilities for editing Ableton Live set files.
 
@@ -10,9 +10,9 @@ Pro-Q plugin devices and changes the processing mode.
 Examples:
 
 ```powershell
-python "ableton_utilities\switch_fabfilter_proq_phase.py" "C:\path\to\Song.als" --mode zero-latency
-python "ableton_utilities\switch_fabfilter_proq_phase.py" "C:\path\to\Song.als" --mode natural-phase --write
-python "ableton_utilities\switch_fabfilter_proq_phase.py" "C:\path\to\Song.als" --mode zero-latency --output "C:\path\to\Song - zero latency.als"
+python "ableton_file_utilities\switch_fabfilter_proq_phase.py" "C:\path\to\Song.als" --mode zero-latency
+python "ableton_file_utilities\switch_fabfilter_proq_phase.py" "C:\path\to\Song.als" --mode natural-phase --write
+python "ableton_file_utilities\switch_fabfilter_proq_phase.py" "C:\path\to\Song.als" --mode zero-latency --output "C:\path\to\Song - zero latency.als"
 ```
 
 Without `--write` or `--output`, the script only reports what it would change.
@@ -64,13 +64,12 @@ guessing.
 
 Code layout:
 
-- `ableton_utilities/live_set.py`: gzip/XML file handling and PluginDevice traversal.
-- `ableton_utilities/proq3_vst3.py`: FabFilter Pro-Q 3 VST3 `ProcessorState` validation and byte patching.
-- `ableton_utilities/proq3/state.py`: Pro-Q 3 state model with band list/replace/add/update/delete operations.
-- `ableton_utilities/saturn2/vst3.py`: FabFilter Saturn 2 VST3 quality-mode validation and byte patching.
-- `ableton_utilities/curve_bender.py`: UAD Curve Bender parameter parsing and conversion planning.
-- `ableton_utilities/live_prepare.py`: one-shot live-preparation pipeline.
-- `ableton_utilities/cli.py`: command-line reporting and write orchestration.
+- `ableton_file_utilities/ableton_file_utilities/core/`: gzip/XML file handling and shared Ableton traversal.
+- `ableton_file_utilities/ableton_file_utilities/plugins/`: plugin-specific adapters, one folder per plugin family.
+- `ableton_file_utilities/ableton_file_utilities/plugins/proq3/`: FabFilter Pro-Q 3 state model, VST3 blob adapter, and phase command.
+- `ableton_file_utilities/ableton_file_utilities/plugins/saturn2/`: FabFilter Saturn 2 VST3 blob adapter and quality command.
+- `ableton_file_utilities/ableton_file_utilities/plugins/curve_bender/`: UAD Curve Bender planning and Pro-Q conversion command.
+- `ableton_file_utilities/ableton_file_utilities/commands/`: cross-plugin workflows such as one-shot live preparation.
 
 ## UAD Chandler Curve Bender Conversion
 
@@ -81,9 +80,9 @@ Pro-Q device block, remaps Ableton IDs, writes the translated bands into the
 clone, and removes the original Curve Bender device.
 
 ```powershell
-python "ableton_utilities\write_curve_bender_to_proq.py" "C:\path\to\Song.als"
-python "ableton_utilities\write_curve_bender_to_proq.py" "C:\path\to\Song.als" --output "C:\path\to\Song - proq.als"
-python "ableton_utilities\write_curve_bender_to_proq.py" "C:\path\to\Song.als" --proq-template "C:\path\to\TemplateWithProQ.als"
+python "ableton_file_utilities\write_curve_bender_to_proq.py" "C:\path\to\Song.als"
+python "ableton_file_utilities\write_curve_bender_to_proq.py" "C:\path\to\Song.als" --output "C:\path\to\Song - proq.als"
+python "ableton_file_utilities\write_curve_bender_to_proq.py" "C:\path\to\Song.als" --proq-template "C:\path\to\TemplateWithProQ.als"
 ```
 
 Current mapping rules:
@@ -118,9 +117,9 @@ rather than guessed. Add paired fixture sets before expanding those maps.
 Saturn 2 VST3 devices and changes the quality mode.
 
 ```powershell
-python "ableton_utilities\switch_fabfilter_saturn_quality.py" "C:\path\to\Song.als" --mode high-quality
-python "ableton_utilities\switch_fabfilter_saturn_quality.py" "C:\path\to\Song.als" --mode super-high-quality --write
-python "ableton_utilities\switch_fabfilter_saturn_quality.py" "C:\path\to\Song.als" --mode normal --output "C:\path\to\Song - normal saturn.als"
+python "ableton_file_utilities\switch_fabfilter_saturn_quality.py" "C:\path\to\Song.als" --mode high-quality
+python "ableton_file_utilities\switch_fabfilter_saturn_quality.py" "C:\path\to\Song.als" --mode super-high-quality --write
+python "ableton_file_utilities\switch_fabfilter_saturn_quality.py" "C:\path\to\Song.als" --mode normal --output "C:\path\to\Song - normal saturn.als"
 ```
 
 Supported mode names:
@@ -154,9 +153,9 @@ known quality values at offset `2804`.
 It refuses to overwrite the source set or an existing output file.
 
 ```powershell
-python "ableton_utilities\live_prepare.py" "C:\path\to\Song.als" --output "C:\path\to\Song_live.als"
-python "ableton_utilities\live_prepare.py" "C:\path\to\Song.als" --saturn-mode super-high-quality --json
-python "ableton_utilities\live_prepare.py" "C:\path\to\Song.als" --proq-template "C:\path\to\TemplateWithProQ.als"
+python "ableton_file_utilities\live_prepare.py" "C:\path\to\Song.als" --output "C:\path\to\Song_live.als"
+python "ableton_file_utilities\live_prepare.py" "C:\path\to\Song.als" --saturn-mode super-high-quality --json
+python "ableton_file_utilities\live_prepare.py" "C:\path\to\Song.als" --proq-template "C:\path\to\TemplateWithProQ.als"
 ```
 
 ## Plan for Vendor Blob Editing

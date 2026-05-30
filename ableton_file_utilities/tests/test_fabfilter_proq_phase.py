@@ -8,7 +8,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from ableton_utilities import cli, live_set, proq3_vst3  # noqa: E402
+from ableton_file_utilities.core import live_set  # noqa: E402
+from ableton_file_utilities.plugins.proq3 import phase_command as cli  # noqa: E402
+from ableton_file_utilities.plugins.proq3 import vst3 as proq3_vst3  # noqa: E402
 
 
 def make_processor(mode: str) -> bytes:

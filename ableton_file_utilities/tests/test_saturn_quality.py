@@ -7,7 +7,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from ableton_utilities.saturn2 import cli, vst3  # noqa: E402
+from ableton_file_utilities.plugins.saturn2 import vst3  # noqa: E402
+from ableton_file_utilities.plugins.saturn2 import quality_command as cli  # noqa: E402
 
 
 def make_processor(mode: str) -> bytes:
@@ -90,4 +91,3 @@ class SaturnQualityTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

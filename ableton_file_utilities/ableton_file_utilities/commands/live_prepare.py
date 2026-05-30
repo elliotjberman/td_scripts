@@ -8,10 +8,10 @@ import json
 import sys
 from pathlib import Path
 
-from ableton_utilities import cli as proq_cli
-from ableton_utilities import live_set
-from ableton_utilities.saturn2 import cli as saturn_cli
-import write_curve_bender_to_proq
+from ableton_file_utilities.core import live_set
+from ableton_file_utilities.plugins.curve_bender import to_proq as curve_bender_to_proq
+from ableton_file_utilities.plugins.proq3 import phase_command as proq_cli
+from ableton_file_utilities.plugins.saturn2 import quality_command as saturn_cli
 
 
 @dataclasses.dataclass(frozen=True)
@@ -43,7 +43,7 @@ def prepare_file(
 
     xml, proq_reports = proq_cli.patch_xml(xml, "zero-latency")
     xml, saturn_reports = saturn_cli.patch_xml(xml, saturn_mode)
-    xml, curve_reports = write_curve_bender_to_proq.patch_xml(xml, template_xml)
+    xml, curve_reports = curve_bender_to_proq.patch_xml(xml, template_xml)
 
     live_set.write(document, output_path, xml)
     return LivePrepareReport(

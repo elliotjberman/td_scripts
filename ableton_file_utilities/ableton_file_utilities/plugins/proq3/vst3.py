@@ -6,7 +6,7 @@ import dataclasses
 import re
 import urllib.parse
 
-from .proq3.state import (
+from .state import (
     MODE_BYTES,
     MODE_LABELS,
     MODE_OFFSET,

@@ -8,7 +8,9 @@ import re
 import sys
 from pathlib import Path
 
-from ableton_utilities import curve_bender, live_set, proq3_vst3
+from ableton_file_utilities.core import live_set
+from ableton_file_utilities.plugins.curve_bender import planner as curve_bender
+from ableton_file_utilities.plugins.proq3 import vst3 as proq3_vst3
 
 
 @dataclasses.dataclass(frozen=True)

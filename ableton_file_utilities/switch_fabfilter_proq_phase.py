@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ableton_utilities.cli import main
+from ableton_file_utilities.plugins.proq3.phase_command import main
 
 
 if __name__ == "__main__":

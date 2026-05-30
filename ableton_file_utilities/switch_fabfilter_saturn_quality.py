@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from ableton_utilities.saturn2.cli import main
+from ableton_file_utilities.plugins.saturn2.quality_command import main
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

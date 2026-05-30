@@ -7,8 +7,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from ableton_utilities import curve_bender, live_set  # noqa: E402
-import write_curve_bender_to_proq  # noqa: E402
+from ableton_file_utilities.core import live_set  # noqa: E402
+from ableton_file_utilities.plugins.curve_bender import planner as curve_bender  # noqa: E402
+from ableton_file_utilities.plugins.curve_bender import to_proq as curve_bender_to_proq  # noqa: E402
 
 
 def param(name: str, value: float, parameter_id: int = 0) -> str:
@@ -120,7 +121,7 @@ class CurveBenderTests(unittest.TestCase):
 </Ableton>
 """
 
-        _xml, reports = write_curve_bender_to_proq.patch_xml(xml)
+        _xml, reports = curve_bender_to_proq.patch_xml(xml)
 
         self.assertEqual(len(reports), 1)
         self.assertEqual(reports[0].proq_index, 2)
@@ -150,7 +151,7 @@ class CurveBenderTests(unittest.TestCase):
 </Ableton>
 """
 
-        patched, reports = write_curve_bender_to_proq.patch_xml(xml, proq_block())
+        patched, reports = curve_bender_to_proq.patch_xml(xml, proq_block())
 
         self.assertEqual(len(reports), 1)
         self.assertTrue(reports[0].created_proq)
