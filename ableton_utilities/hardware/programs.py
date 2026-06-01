@@ -23,8 +23,6 @@ class ProgramSelection:
     synth_key: str
     program: int
     bank: int | None
-    source_name: str
-    source_order: str
 
     def clip_values(self) -> MidiProgramValues:
         if self.synth_key == "tetra":
@@ -55,14 +53,14 @@ def _parse_tetra_program(name: str) -> ProgramSelection | None:
 
     first, second = (int(part) for part in matches[-1])
     if first in TETRA_BANKS:
-        bank, program, order = first, second, "bank-program"
+        bank, program = first, second
     elif second in TETRA_BANKS:
-        program, bank, order = first, second, "program-bank"
+        program, bank = first, second
     else:
         return None
     if not _valid_program(program):
         return None
-    return ProgramSelection("tetra", program, bank, name, order)
+    return ProgramSelection("tetra", program, bank)
 
 
 def _parse_moog_program(name: str) -> ProgramSelection | None:
@@ -72,7 +70,7 @@ def _parse_moog_program(name: str) -> ProgramSelection | None:
     program = int(match.group(1))
     if not _valid_program(program):
         return None
-    return ProgramSelection("moog", program, None, name, "program")
+    return ProgramSelection("moog", program, None)
 
 
 def _valid_program(program: int) -> bool:

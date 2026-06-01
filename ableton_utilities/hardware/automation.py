@@ -25,14 +25,6 @@ def copy_mapped_automation_envelopes(source_track: str, target_track: str, id_ma
     return live_set.replace_range(target_track, automation_range, _automation_block(envelopes))
 
 
-def missing_automation_targets(track_block: str) -> set[str]:
-    target_ids = _global_target_ids(track_block)
-    missing: set[str] = set()
-    for envelope in _automation_envelopes(track_block):
-        missing.update(target_id for target_id in _pointee_ids(envelope) if target_id not in target_ids)
-    return missing
-
-
 def _mapped_source_envelopes(source_track: str, id_map: dict[str, str]) -> list[str]:
     envelopes = []
     for envelope in _automation_envelopes(source_track):

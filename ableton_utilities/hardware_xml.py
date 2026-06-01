@@ -17,7 +17,6 @@ TRACK_TAGS = {"AudioTrack", "GroupTrack", "MidiTrack"}
 
 @dataclasses.dataclass(frozen=True)
 class TrackBlock:
-    index: int
     start: int
     end: int
     tag: str
@@ -29,7 +28,7 @@ class TrackBlock:
 
 def parse_tracks(xml: str) -> list[TrackBlock]:
     tracks: list[TrackBlock] = []
-    for index, (start, end) in enumerate(live_set.tag_ranges(xml, TRACK_TAGS)):
+    for start, end in live_set.tag_ranges(xml, TRACK_TAGS):
         block = xml[start:end]
         try:
             element = ET.fromstring(block)
@@ -37,7 +36,7 @@ def parse_tracks(xml: str) -> list[TrackBlock]:
             continue
         track_id = int(element.attrib.get("Id", "-1"))
         group_id = int(value(element, "./TrackGroupId") or "-1")
-        tracks.append(TrackBlock(index, start, end, element.tag, track_id, group_id, track_name(element), block))
+        tracks.append(TrackBlock(start, end, element.tag, track_id, group_id, track_name(element), block))
     return tracks
 
 

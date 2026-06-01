@@ -220,11 +220,6 @@ def set_next_pointee_id(xml: str, next_id: int) -> str:
     return pattern.sub(rf"\g<1>{next_id}\3", xml, count=1)
 
 
-def remap_global_ids(xml: str, first_id: int) -> tuple[str, int]:
-    xml, next_id, _id_map = remap_global_ids_with_map(xml, first_id)
-    return xml, next_id
-
-
 def remap_global_ids_with_map(xml: str, first_id: int) -> tuple[str, int, dict[str, str]]:
     next_id = first_id
     id_map: dict[str, str] = {}
