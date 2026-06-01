@@ -6,12 +6,15 @@ out vec4 fragColor;
 void main()
 {
     vec4 baseColor = texture(sTD2DInputs[0], vUV.st);
-    vec2 p = vUV.st;
+    vec2 uv = clamp(vUV.st, 0.0, 1.0);
 
-    float rawVignette = 0.5 + 0.5 * sqrt(vignetteScale * p.x * p.y * (1.0 - p.x) * (1.0 - p.y));
+    // Frame-shaped falloff: avoids a visible circular spotlight in wide output.
+    vec2 edge = uv * (1.0 - uv);
+    float frame = clamp(edge.x * edge.y * max(vignetteScale, 0.0), 0.0, 1.0);
+    float falloff = 1.0 - pow(frame, 0.25);
 
-    // Interpolate between no vignette (1.0) and rawVignette, based on strength
-    float vignette = mix(1.0, rawVignette, vignetteStrength);
+    float strength = clamp(vignetteStrength, 0.0, 1.0);
+    float vignette = 1.0 - 0.45 * strength * falloff;
 
     vec3 finalColor = baseColor.rgb * vignette;
     fragColor = TDOutputSwizzle(vec4(finalColor, baseColor.a));
