@@ -12,6 +12,7 @@ from ableton_utilities.hardware_xml import TrackBlock, parse_tracks
 
 ROLL_VOLUME_TARGET = "ControllerUtils > VSDC_IN > MidiVelocity > MaxOut/Out Hi"
 ROLL_VOLUME_SLOT_OBJECT = "obj-16"
+ROLL_VOLUME_MIN_PERCENT = "1"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -33,7 +34,14 @@ def apply_boilerplate_global_macros(xml: str) -> tuple[str, list[GlobalMacroRepo
     if "Map8.amxd" not in global_track.block:
         return xml, [], [*target_warnings, "Global track had no Map8.amxd device for RollVol mapping."]
 
-    patched_global = _map_map8_slot(global_track.block, ROLL_VOLUME_SLOT_OBJECT, 0, "RollVol", lom_id)
+    patched_global = _map_map8_slot(
+        global_track.block,
+        ROLL_VOLUME_SLOT_OBJECT,
+        0,
+        "RollVol",
+        lom_id,
+        min_percent=ROLL_VOLUME_MIN_PERCENT,
+    )
     xml = live_set.replace_range(xml, (global_track.start, global_track.end), patched_global)
     report = GlobalMacroReport("RollVol", ROLL_VOLUME_TARGET, lom_id)
     return xml, [report], target_warnings
@@ -80,7 +88,14 @@ def _ensure_velocity_maxout_lom(track_block: str, new_lom_id: str) -> tuple[str,
     return live_set.replace_range(track_block, velocity_range, velocity), new_lom_id
 
 
-def _map_map8_slot(global_block: str, slot_object: str, macro_index: int, macro_name: str, lom_id: str) -> str:
+def _map_map8_slot(
+    global_block: str,
+    slot_object: str,
+    macro_index: int,
+    macro_name: str,
+    lom_id: str,
+    min_percent: str | None = None,
+) -> str:
     block, count = re.subn(
         rf'(<MacroDisplayNames\.{macro_index}\b[^>]*\bValue=")[^"]*(" />)',
         rf"\g<1>{live_set.escape_attr(macro_name)}\2",
@@ -91,7 +106,23 @@ def _map_map8_slot(global_block: str, slot_object: str, macro_index: int, macro_
         raise ValueError(f"Could not rename Global macro display {macro_index}.")
     block = _upsert_idref(block, f"{slot_object}::obj-29::obj-18", lom_id, "id")
     block = _upsert_idref(block, f"{slot_object}::obj-28::obj-33", lom_id, "")
+    if min_percent is not None:
+        block = _set_map8_min_percent(block, macro_index, min_percent)
     return _enable_map8_toggle(block, macro_index)
+
+
+def _set_map8_min_percent(block: str, macro_index: int, min_percent: str) -> str:
+    name = f"Min[{macro_index + 1}]"
+    pattern = re.compile(
+        r'(<MxDIntParameter\b[^>]*>.*?<Name Value="'
+        + re.escape(name)
+        + r'" />.*?<Timeable>.*?<Manual Value=")[^"]*(" />)',
+        re.DOTALL,
+    )
+    block, count = pattern.subn(rf"\g<1>{min_percent}\2", block, count=1)
+    if count != 1:
+        raise ValueError(f"Could not set Global Map8 {name} minimum.")
+    return block
 
 
 def _upsert_idref(block: str, name: str, lom_id: str, property_value: str) -> str:

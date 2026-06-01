@@ -101,6 +101,8 @@ RollVol -> ControllerUtils > VSDC_IN > Velocity > Out Hi
 In Ableton XML, `Out Hi` is the `MidiVelocity` device's `MaxOut` parameter. The
 Map8 object used by the existing live sets for this first roll-volume mapping is
 `obj-16`; do not infer it from display order or use `obj-5`.
+RollVol's Map8 minimum is set to `1%`, not `0%`, so turning the macro fully down
+does not stop the drum controller from firing during a live set.
 
 Song-specific Global macros, such as DrumMorph, PercRoll, DrumFilter, or
 DrumVerb, should be applied to validation copies of the target `.als` set rather
