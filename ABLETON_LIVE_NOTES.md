@@ -108,14 +108,26 @@ Song-specific Global macros, such as DrumMorph, PercRoll, DrumFilter, or
 DrumVerb, should be applied to validation copies of the target `.als` set rather
 than added to the conversion boilerplate.
 When applying song-specific Map8 rows, use the known slot-object order
-`obj-16`, `obj-5`, `obj-62`, `obj-10`, `obj-11`, `obj-12`, `obj-13`, `obj-8`.
-In particular, row 3 is `obj-62`; using `obj-10` for row 3 shifts later
-mappings down by one row in the Map8 UI.
+`obj-16`, `obj-5`, `obj-8`, `obj-10`, `obj-11`, `obj-12`, `obj-13`, `obj-62`.
+In particular, row 3 is `obj-8`. Reference sets show `obj-62` resolves as row
+8, so using it for row 3 moves that mapping to the bottom of the Map8 UI.
 
 The Global macro rack should also have `/` mapped to its
 `RemoteSelectionKeyMidi`, matching the reference sets' blue-hand/focus shortcut.
+The `Global` track itself should be a `MidiTrack`, not an `AudioTrack`, and it
+should include the Max MIDI device at
+`C:\Users\Elliot\setlist_manager\setlist-device.amxd` before the Live_Macro/Map8
+rack in the main device chain.
+
+The master bus should end with the `TDA_Master.amxd` Max for Live device. The
+converter clones this device from the template set's MasterTrack, remaps its
+target ids and nonzero `LomId` values, and appends it to the converted set's
+MasterTrack when it is missing.
 
 If the source has `ControllerUtils > VSDC_IN` but no `Global` track, and the
 template set has a Global track, the converter clones a clean Global track from
 the template, remaps its Live target ids and nonzero `LomId` values, clears any
-template Map8 target mappings, then applies the RollVol mapping.
+template Map8 target mappings, normalizes it to a MIDI track with the setlist
+device before Map8, then applies the RollVol mapping. If the source already has
+a Global track, the converter still performs the MIDI-track and setlist-device
+normalization instead of leaving an old audio Global untouched.

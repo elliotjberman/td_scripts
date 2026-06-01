@@ -13,12 +13,22 @@ from ableton_utilities.hardware_xml import TrackBlock, parse_tracks
 MAP8_SLOT_OBJECTS = (
     "obj-16",
     "obj-5",
-    "obj-62",
+    "obj-8",
     "obj-10",
     "obj-11",
     "obj-12",
     "obj-13",
-    "obj-8",
+    "obj-62",
+)
+MAP8_MIN_PARAMETER_NAMES = (
+    "Min[8]",
+    "Min[9]",
+    "Min[10]",
+    "Min[11]",
+    "Min[1]",
+    "Min[2]",
+    "Min[3]",
+    "Min[4]",
 )
 ROLL_VOLUME_TARGET = "ControllerUtils > VSDC_IN > MidiVelocity > MaxOut/Out Hi"
 ROLL_VOLUME_SLOT_OBJECT = MAP8_SLOT_OBJECTS[0]
@@ -122,17 +132,30 @@ def _map_map8_slot(
 
 
 def _set_map8_min_percent(block: str, macro_index: int, min_percent: str) -> str:
-    name = f"Min[{macro_index + 1}]"
-    pattern = re.compile(
-        r'(<MxDIntParameter\b[^>]*>.*?<Name Value="'
-        + re.escape(name)
-        + r'" />.*?<Timeable>.*?<Manual Value=")[^"]*(" />)',
-        re.DOTALL,
-    )
-    block, count = pattern.subn(rf"\g<1>{min_percent}\2", block, count=1)
-    if count != 1:
-        raise ValueError(f"Could not set Global Map8 {name} minimum.")
-    return block
+    try:
+        name = MAP8_MIN_PARAMETER_NAMES[macro_index]
+    except IndexError as exc:
+        raise ValueError(f"No known Global Map8 minimum parameter for row {macro_index + 1}.") from exc
+    return _set_mxd_int_manual(block, name, min_percent)
+
+
+def _set_mxd_int_manual(block: str, name: str, value: str) -> str:
+    needle = f'<Name Value="{live_set.escape_attr(name)}" />'
+    for param_range in live_set.tag_ranges(block, {"MxDIntParameter"}):
+        param = block[param_range[0] : param_range[1]]
+        if needle not in param:
+            continue
+        param, count = re.subn(
+            r'(<Timeable>.*?<Manual Value=")[^"]*(" />)',
+            rf"\g<1>{value}\2",
+            param,
+            count=1,
+            flags=re.DOTALL,
+        )
+        if count != 1:
+            raise ValueError(f"Could not set Global Map8 {name} manual value.")
+        return live_set.replace_range(block, param_range, param)
+    raise ValueError(f"Could not find Global Map8 {name} minimum.")
 
 
 def _upsert_idref(block: str, name: str, lom_id: str, property_value: str) -> str:

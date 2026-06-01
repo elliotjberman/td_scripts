@@ -13,6 +13,7 @@ from ableton_utilities.hardware.programs import parse_track_program
 from ableton_utilities.live.global_macros import apply_boilerplate_global_macros
 from ableton_utilities.live.global_track import ensure_global_track
 from ableton_utilities.live.keymap import GLOBAL_FOCUS_TARGET, apply_global_focus_key
+from ableton_utilities.live.master_bus import TDA_MASTER_REPORT, ensure_tda_master
 from ableton_utilities.hardware_xml import (
     build_live_track,
     external_instrument_templates,
@@ -79,6 +80,7 @@ class ConversionReport:
     output_path: str
     added_tracks: list[str]
     boilerplate_tracks: list[str]
+    boilerplate_devices: list[str]
     global_macros: list[str]
     key_mappings: list[str]
     warnings: list[str]
@@ -99,7 +101,7 @@ def convert_file(
 
     document = live_set.read(input_path)
     template_xml = live_set.read(template_path).xml if template_path else document.xml
-    xml, added, boilerplate_tracks, global_macros, key_mappings, warnings = convert_xml(
+    xml, added, boilerplate_tracks, boilerplate_devices, global_macros, key_mappings, warnings = convert_xml(
         document.xml, template_xml, instruments, mute_new_tracks
     )
     live_set.write(document, output_path, xml)
@@ -108,6 +110,7 @@ def convert_file(
         output_path=str(output_path),
         added_tracks=added,
         boilerplate_tracks=boilerplate_tracks,
+        boilerplate_devices=boilerplate_devices,
         global_macros=global_macros,
         key_mappings=key_mappings,
         warnings=warnings,
@@ -120,7 +123,7 @@ def convert_xml(
     template_xml: str,
     instruments: tuple[str, ...],
     mute_new_tracks: bool = True,
-) -> tuple[str, list[str], list[str], list[str], list[str], list[str]]:
+) -> tuple[str, list[str], list[str], list[str], list[str], list[str], list[str]]:
     tracks = parse_tracks(xml)
     templates = external_instrument_templates(template_xml)
     fallback_template = next(iter(templates.values()), None)
@@ -129,6 +132,7 @@ def convert_xml(
     insertions: list[tuple[int, str]] = []
     added: list[str] = []
     boilerplate_tracks: list[str] = []
+    boilerplate_devices: list[str] = []
     key_mappings: list[str] = []
     warnings: list[str] = []
 
@@ -171,6 +175,11 @@ def convert_xml(
     if result.added:
         boilerplate_tracks.append("Global")
     warnings.extend(result.warnings)
+    master_result = ensure_tda_master(xml, template_xml, next_global_id)
+    xml, next_global_id = master_result.xml, master_result.next_global_id
+    if master_result.added:
+        boilerplate_devices.append(TDA_MASTER_REPORT)
+    warnings.extend(master_result.warnings)
     xml = live_set.set_next_pointee_id(xml, next_global_id)
     xml, global_reports, global_warnings = apply_boilerplate_global_macros(xml)
     warnings.extend(global_warnings)
@@ -180,7 +189,7 @@ def convert_xml(
     warnings.extend(focus_warnings)
     live_set.validate_xml(xml)
     global_macros = [f"{report.name} -> {report.target} (LomId {report.lom_id})" for report in global_reports]
-    return xml, added, boilerplate_tracks, global_macros, key_mappings, warnings
+    return xml, added, boilerplate_tracks, boilerplate_devices, global_macros, key_mappings, warnings
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -212,6 +221,9 @@ def format_report(report: ConversionReport) -> str:
     lines.append("New tracks: " + (", ".join(report.added_tracks) if report.added_tracks else "none"))
     lines.append(
         "Boilerplate tracks: " + (", ".join(report.boilerplate_tracks) if report.boilerplate_tracks else "none")
+    )
+    lines.append(
+        "Boilerplate devices: " + (", ".join(report.boilerplate_devices) if report.boilerplate_devices else "none")
     )
     lines.append("Global macros: " + (", ".join(report.global_macros) if report.global_macros else "none"))
     lines.append("Key mappings: " + (", ".join(report.key_mappings) if report.key_mappings else "none"))
