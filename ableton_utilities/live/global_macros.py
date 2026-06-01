@@ -4,10 +4,14 @@ from __future__ import annotations
 
 import dataclasses
 import re
+import xml.etree.ElementTree as ET
 
 from ableton_utilities import live_set
-from ableton_utilities.hardware_xml import parse_tracks
-from ableton_utilities.live.macro_targets import ensure_boilerplate_macro_targets
+from ableton_utilities.hardware_xml import TrackBlock, parse_tracks
+
+
+ROLL_VOLUME_TARGET = "ControllerUtils > VSDC_IN > MidiVelocity > MaxOut/Out Hi"
+ROLL_VOLUME_SLOT_OBJECT = "obj-16"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -18,34 +22,62 @@ class GlobalMacroReport:
 
 
 def apply_boilerplate_global_macros(xml: str) -> tuple[str, list[GlobalMacroReport], list[str]]:
-    reports: list[GlobalMacroReport] = []
+    xml, lom_id, target_warnings = _ensure_roll_volume_target(xml)
+    if lom_id is None:
+        return xml, [], target_warnings
 
     tracks = parse_tracks(xml)
-    global_track = next((track for track in tracks if track.name == "Global"), None)
+    global_track = _find_track(tracks, "Global")
     if global_track is None:
-        return xml, [], ["No Global track was found for global Map8 mappings."]
+        return xml, [], [*target_warnings, "No Global track was found for RollVol Map8 mapping."]
     if "Map8.amxd" not in global_track.block:
-        return xml, [], ["Global track had no Map8.amxd device for global mappings."]
+        return xml, [], [*target_warnings, "Global track had no Map8.amxd device for RollVol mapping."]
 
-    xml, macro_targets, warnings = ensure_boilerplate_macro_targets(xml)
-
-    global_track = next((track for track in parse_tracks(xml) if track.name == "Global"), None)
-    if global_track is None:
-        return xml, reports, [*warnings, "No Global track was found after target setup."]
-
-    patched_global = global_track.block
-    for target in macro_targets:
-        patched_global = _map_map8_slot(
-            patched_global,
-            target.slot_object,
-            target.macro_index,
-            target.name,
-            target.lom_id,
-        )
-        reports.append(GlobalMacroReport(target.name, target.target, target.lom_id))
-
+    patched_global = _map_map8_slot(global_track.block, ROLL_VOLUME_SLOT_OBJECT, 0, "RollVol", lom_id)
     xml = live_set.replace_range(xml, (global_track.start, global_track.end), patched_global)
-    return xml, reports, warnings
+    report = GlobalMacroReport("RollVol", ROLL_VOLUME_TARGET, lom_id)
+    return xml, [report], target_warnings
+
+
+def _ensure_roll_volume_target(xml: str) -> tuple[str, str | None, list[str]]:
+    tracks = parse_tracks(xml)
+    controller = _find_track(tracks, "ControllerUtils")
+    target_track = _find_track(tracks, "VSDC_IN", group_id=controller.track_id if controller else None)
+    if target_track is None:
+        return xml, None, ["No ControllerUtils > VSDC_IN track was found for RollVol mapping."]
+
+    block, lom_id = _ensure_velocity_maxout_lom(target_track.block, _next_lom_id(xml))
+    if lom_id is None:
+        return xml, None, ["VSDC_IN had no MidiVelocity MaxOut/Out Hi parameter for RollVol mapping."]
+    if block != target_track.block:
+        xml = live_set.replace_range(xml, (target_track.start, target_track.end), block)
+    return xml, lom_id, []
+
+
+def _ensure_velocity_maxout_lom(track_block: str, new_lom_id: str) -> tuple[str, str | None]:
+    velocity_range = live_set.first_tag_range(track_block, "MidiVelocity")
+    if velocity_range is None:
+        return track_block, None
+    velocity = track_block[velocity_range[0] : velocity_range[1]]
+    maxout_range = live_set.first_tag_range(velocity, "MaxOut")
+    if maxout_range is None:
+        return track_block, None
+
+    maxout = velocity[maxout_range[0] : maxout_range[1]]
+    current = _lom_id(maxout)
+    if current and current != "0":
+        return track_block, current
+
+    maxout, count = re.subn(
+        r'(<LomId\b[^>]*\bValue=")\d+(" />)',
+        rf"\g<1>{new_lom_id}\2",
+        maxout,
+        count=1,
+    )
+    if count != 1:
+        return track_block, None
+    velocity = live_set.replace_range(velocity, maxout_range, maxout)
+    return live_set.replace_range(track_block, velocity_range, velocity), new_lom_id
 
 
 def _map_map8_slot(global_block: str, slot_object: str, macro_index: int, macro_name: str, lom_id: str) -> str:
@@ -126,3 +158,18 @@ def _enable_map8_toggle(block: str, macro_index: int) -> str:
 
 def _populated_idref_list_range(block: str) -> tuple[int, int] | None:
     return next((r for r in live_set.tag_ranges(block, {"IdRefList"}) if "<MxDIdRef " in block[r[0] : r[1]]), None)
+
+
+def _find_track(tracks: list[TrackBlock], name: str, group_id: int | None = None) -> TrackBlock | None:
+    return next((track for track in tracks if track.name == name and (group_id is None or track.group_id == group_id)), None)
+
+
+def _next_lom_id(xml: str) -> str:
+    return str(max((int(value) for value in re.findall(r'<LomId\b[^>]*\bValue="(\d+)"', xml)), default=0) + 1)
+
+
+def _lom_id(xml: str) -> str | None:
+    try:
+        return ET.fromstring(xml).find("./LomId").attrib.get("Value")
+    except (AttributeError, ET.ParseError):
+        return None

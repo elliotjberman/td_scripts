@@ -92,34 +92,19 @@ Instrument routes to the fixed live Tetra/Moog channels above.
 The converter also seeds the live Global macro rack when the set has, or the
 template can provide, the standard Global/ControllerUtils boilerplate.
 
-The standard Global macros are:
+The only Global macro seeded by the converter is:
 
 ```text
 RollVol -> ControllerUtils > VSDC_IN > Velocity > Out Hi
-DrumMorph -> Micro > DrumGroupDevice > MacroControls.0
-PercRoll -> ArpPerc > InstrumentGroupDevice > MacroControls.0
-DrumFilter -> AllDrum > CrushFilter > Sample Rate
-DrumVerb -> AllDrum > Mixer Send 1 > B-BigVerb
 ```
 
 In Ableton XML, `Out Hi` is the `MidiVelocity` device's `MaxOut` parameter. The
 Map8 object used by the existing live sets for this first roll-volume mapping is
 `obj-16`; do not infer it from display order or use `obj-5`.
 
-The following Map8 slot objects are used for the first five Global macros:
-
-```text
-1 RollVol    -> obj-16
-2 DrumMorph  -> obj-5
-3 PercRoll   -> obj-10
-4 DrumFilter -> obj-11
-5 DrumVerb   -> obj-12
-```
-
-The DrumFilter mapping intentionally uses the `AllDrum` track's `CrushFilter`
-`MacroControls.0` target. Ableton resolves that target as the Redux `Sample Rate`
-parameter in the Map8 UI. DrumVerb maps AllDrum send slot 1, which is the
-`B-BigVerb` return in the reference sets.
+Song-specific Global macros, such as DrumMorph, PercRoll, DrumFilter, or
+DrumVerb, should be applied to validation copies of the target `.als` set rather
+than added to the conversion boilerplate.
 
 The Global macro rack should also have `/` mapped to its
 `RemoteSelectionKeyMidi`, matching the reference sets' blue-hand/focus shortcut.
@@ -127,4 +112,4 @@ The Global macro rack should also have `/` mapped to its
 If the source has `ControllerUtils > VSDC_IN` but no `Global` track, and the
 template set has a Global track, the converter clones a clean Global track from
 the template, remaps its Live target ids and nonzero `LomId` values, clears any
-template Map8 target mappings, then applies the standard Global macro mappings.
+template Map8 target mappings, then applies the RollVol mapping.
