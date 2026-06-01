@@ -12,6 +12,7 @@ from ableton_utilities import live_set
 from ableton_utilities.hardware.programs import parse_track_program
 from ableton_utilities.live.global_macros import apply_boilerplate_global_macros
 from ableton_utilities.live.global_track import ensure_global_track
+from ableton_utilities.live.keymap import GLOBAL_FOCUS_TARGET, apply_global_focus_key
 from ableton_utilities.hardware_xml import (
     build_live_track,
     external_instrument_templates,
@@ -79,6 +80,7 @@ class ConversionReport:
     added_tracks: list[str]
     boilerplate_tracks: list[str]
     global_macros: list[str]
+    key_mappings: list[str]
     warnings: list[str]
     muted_new_tracks: bool
 
@@ -97,7 +99,7 @@ def convert_file(
 
     document = live_set.read(input_path)
     template_xml = live_set.read(template_path).xml if template_path else document.xml
-    xml, added, boilerplate_tracks, global_macros, warnings = convert_xml(
+    xml, added, boilerplate_tracks, global_macros, key_mappings, warnings = convert_xml(
         document.xml, template_xml, instruments, mute_new_tracks
     )
     live_set.write(document, output_path, xml)
@@ -107,6 +109,7 @@ def convert_file(
         added_tracks=added,
         boilerplate_tracks=boilerplate_tracks,
         global_macros=global_macros,
+        key_mappings=key_mappings,
         warnings=warnings,
         muted_new_tracks=mute_new_tracks,
     )
@@ -117,7 +120,7 @@ def convert_xml(
     template_xml: str,
     instruments: tuple[str, ...],
     mute_new_tracks: bool = True,
-) -> tuple[str, list[str], list[str], list[str], list[str]]:
+) -> tuple[str, list[str], list[str], list[str], list[str], list[str]]:
     tracks = parse_tracks(xml)
     templates = external_instrument_templates(template_xml)
     fallback_template = next(iter(templates.values()), None)
@@ -126,6 +129,7 @@ def convert_xml(
     insertions: list[tuple[int, str]] = []
     added: list[str] = []
     boilerplate_tracks: list[str] = []
+    key_mappings: list[str] = []
     warnings: list[str] = []
 
     for instrument in instruments:
@@ -170,9 +174,13 @@ def convert_xml(
     xml = live_set.set_next_pointee_id(xml, next_global_id)
     xml, global_reports, global_warnings = apply_boilerplate_global_macros(xml)
     warnings.extend(global_warnings)
+    xml, focus_mapped, focus_warnings = apply_global_focus_key(xml)
+    if focus_mapped:
+        key_mappings.append(f"/ -> {GLOBAL_FOCUS_TARGET}")
+    warnings.extend(focus_warnings)
     live_set.validate_xml(xml)
     global_macros = [f"{report.name} -> {report.target} (LomId {report.lom_id})" for report in global_reports]
-    return xml, added, boilerplate_tracks, global_macros, warnings
+    return xml, added, boilerplate_tracks, global_macros, key_mappings, warnings
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -206,6 +214,7 @@ def format_report(report: ConversionReport) -> str:
         "Boilerplate tracks: " + (", ".join(report.boilerplate_tracks) if report.boilerplate_tracks else "none")
     )
     lines.append("Global macros: " + (", ".join(report.global_macros) if report.global_macros else "none"))
+    lines.append("Key mappings: " + (", ".join(report.key_mappings) if report.key_mappings else "none"))
     lines.append(f"New tracks muted: {report.muted_new_tracks}")
     lines.extend(f"Warning: {warning}" for warning in report.warnings)
     return "\n".join(lines)

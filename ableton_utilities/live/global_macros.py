@@ -12,6 +12,8 @@ from ableton_utilities.hardware_xml import TrackBlock, parse_tracks
 
 ROLL_VOLUME_TARGET = "ControllerUtils > VSDC_IN > MidiVelocity > MaxOut/Out Hi"
 ROLL_VOLUME_SLOT_OBJECT = "obj-16"
+CRUSH_FILTER_RATE_TARGET = "AllDrum > CrushFilter > MacroControls.0/Sample Rate"
+CRUSH_FILTER_RATE_SLOT_OBJECT = "obj-5"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -22,21 +24,35 @@ class GlobalMacroReport:
 
 
 def apply_boilerplate_global_macros(xml: str) -> tuple[str, list[GlobalMacroReport], list[str]]:
-    xml, lom_id, target_warnings = _ensure_roll_volume_target(xml)
-    if lom_id is None:
-        return xml, [], target_warnings
+    reports: list[GlobalMacroReport] = []
+    warnings: list[str] = []
 
     tracks = parse_tracks(xml)
     global_track = _find_track(tracks, "Global")
     if global_track is None:
-        return xml, [], [*target_warnings, "No Global track was found for RollVol Map8 mapping."]
+        return xml, [], ["No Global track was found for global Map8 mappings."]
     if "Map8.amxd" not in global_track.block:
-        return xml, [], [*target_warnings, "Global track had no Map8.amxd device for RollVol mapping."]
+        return xml, [], ["Global track had no Map8.amxd device for global mappings."]
 
-    patched_global = _map_map8_slot(global_track.block, ROLL_VOLUME_SLOT_OBJECT, "RollVol", lom_id)
+    xml, roll_lom_id, roll_warnings = _ensure_roll_volume_target(xml)
+    warnings.extend(roll_warnings)
+    xml, rate_lom_id, rate_warnings = _ensure_crush_filter_rate_target(xml)
+    warnings.extend(rate_warnings)
+
+    global_track = _find_track(parse_tracks(xml), "Global")
+    if global_track is None:
+        return xml, reports, [*warnings, "No Global track was found after target setup."]
+
+    patched_global = global_track.block
+    if roll_lom_id is not None:
+        patched_global = _map_map8_slot(patched_global, ROLL_VOLUME_SLOT_OBJECT, 0, "RollVol", roll_lom_id)
+        reports.append(GlobalMacroReport("RollVol", ROLL_VOLUME_TARGET, roll_lom_id))
+    if rate_lom_id is not None:
+        patched_global = _map_map8_slot(patched_global, CRUSH_FILTER_RATE_SLOT_OBJECT, 1, "SampleRate", rate_lom_id)
+        reports.append(GlobalMacroReport("SampleRate", CRUSH_FILTER_RATE_TARGET, rate_lom_id))
+
     xml = live_set.replace_range(xml, (global_track.start, global_track.end), patched_global)
-    report = GlobalMacroReport("RollVol", ROLL_VOLUME_TARGET, lom_id)
-    return xml, [report], target_warnings
+    return xml, reports, warnings
 
 
 def _ensure_roll_volume_target(xml: str) -> tuple[str, str | None, list[str]]:
@@ -52,6 +68,47 @@ def _ensure_roll_volume_target(xml: str) -> tuple[str, str | None, list[str]]:
     if block != target_track.block:
         xml = live_set.replace_range(xml, (target_track.start, target_track.end), block)
     return xml, lom_id, []
+
+
+def _ensure_crush_filter_rate_target(xml: str) -> tuple[str, str | None, list[str]]:
+    tracks = parse_tracks(xml)
+    candidates = sorted(
+        tracks,
+        key=lambda track: (0 if "drum" in track.name.lower() else 1, track.index),
+    )
+    for track in candidates:
+        block, lom_id = _ensure_crush_filter_macro_lom(track.block, _next_lom_id(xml))
+        if lom_id is None:
+            continue
+        if block != track.block:
+            xml = live_set.replace_range(xml, (track.start, track.end), block)
+        return xml, lom_id, []
+    return xml, None, ["No drum CrushFilter sample-rate macro was found for Global macro 2."]
+
+
+def _ensure_crush_filter_macro_lom(track_block: str, new_lom_id: str) -> tuple[str, str | None]:
+    for device_range in live_set.tag_ranges(track_block, {"AudioEffectGroupDevice"}):
+        device = track_block[device_range[0] : device_range[1]]
+        if _xml_value(device, "./UserName") != "CrushFilter":
+            continue
+        macro_range = live_set.first_tag_range(device, "MacroControls.0")
+        if macro_range is None:
+            return track_block, None
+        macro = device[macro_range[0] : macro_range[1]]
+        current = _lom_id(macro)
+        if current and current != "0":
+            return track_block, current
+        macro, count = re.subn(
+            r'(<LomId\b[^>]*\bValue=")\d+(" />)',
+            rf"\g<1>{new_lom_id}\2",
+            macro,
+            count=1,
+        )
+        if count != 1:
+            return track_block, None
+        device = live_set.replace_range(device, macro_range, macro)
+        return live_set.replace_range(track_block, device_range, device), new_lom_id
+    return track_block, None
 
 
 def _ensure_velocity_maxout_lom(track_block: str, new_lom_id: str) -> tuple[str, str | None]:
@@ -80,18 +137,18 @@ def _ensure_velocity_maxout_lom(track_block: str, new_lom_id: str) -> tuple[str,
     return live_set.replace_range(track_block, velocity_range, velocity), new_lom_id
 
 
-def _map_map8_slot(global_block: str, slot_object: str, macro_name: str, lom_id: str) -> str:
+def _map_map8_slot(global_block: str, slot_object: str, macro_index: int, macro_name: str, lom_id: str) -> str:
     block, count = re.subn(
-        r'(<MacroDisplayNames\.0\b[^>]*\bValue=")[^"]*(" />)',
+        rf'(<MacroDisplayNames\.{macro_index}\b[^>]*\bValue=")[^"]*(" />)',
         rf"\g<1>{live_set.escape_attr(macro_name)}\2",
         global_block,
         count=1,
     )
     if count != 1:
-        raise ValueError("Could not rename Global macro display 0.")
+        raise ValueError(f"Could not rename Global macro display {macro_index}.")
     block = _upsert_idref(block, f"{slot_object}::obj-29::obj-18", lom_id, "id")
     block = _upsert_idref(block, f"{slot_object}::obj-28::obj-33", lom_id, "")
-    return _enable_first_map8_toggle(block)
+    return _enable_map8_toggle(block, macro_index)
 
 
 def _upsert_idref(block: str, name: str, lom_id: str, property_value: str) -> str:
@@ -132,13 +189,21 @@ def _patch_idref_lom(block: str, name: str, lom_id: str) -> str:
     return block
 
 
-def _enable_first_map8_toggle(block: str) -> str:
+def _enable_map8_toggle(block: str, macro_index: int) -> str:
     pattern = re.compile(r"(<Blob>\s*)([0-9A-Fa-f\s]+)(\s*</Blob>)")
     match = pattern.search(block)
     if match is None:
         raise ValueError("Global Map8 had no Blob payload.")
     decoded = bytes.fromhex("".join(match.group(2).split())).decode("utf-8")
-    decoded = re.sub(r'("live\.toggle"\s*:\s*\[\s*)0(?:\.0)?(\s*\])', r"\g<1>1.0\2", decoded, count=1)
+    key = "live.toggle" if macro_index == 0 else f"live.toggle[{macro_index}]"
+    decoded, count = re.subn(
+        rf'("{re.escape(key)}"\s*:\s*\[\s*)[^]]+?(\s*\])',
+        r"\g<1>1.0\2",
+        decoded,
+        count=1,
+    )
+    if count != 1:
+        raise ValueError(f"Could not enable Map8 toggle {macro_index}.")
     encoded = decoded.encode("utf-8").hex().upper()
     line_sep = "\r\n" if "\r\n" in match.group(0) else "\n"
     leading = match.group(1)[len("<Blob>") :]
@@ -165,3 +230,11 @@ def _lom_id(xml: str) -> str | None:
         return ET.fromstring(xml).find("./LomId").attrib.get("Value")
     except (AttributeError, ET.ParseError):
         return None
+
+
+def _xml_value(xml: str, path: str) -> str | None:
+    try:
+        node = ET.fromstring(xml).find(path)
+    except ET.ParseError:
+        return None
+    return None if node is None else node.attrib.get("Value")
