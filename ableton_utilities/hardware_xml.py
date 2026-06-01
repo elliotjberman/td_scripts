@@ -8,11 +8,11 @@ import xml.etree.ElementTree as ET
 
 from ableton_utilities import live_set
 from ableton_utilities.hardware.automation import copy_mapped_automation_envelopes
-from ableton_utilities.hardware.programs import ProgramSelection, apply_program_selection
+from ableton_utilities.hardware.program_clips import apply_program_selection
+from ableton_utilities.hardware.programs import ProgramSelection
 
 
 TRACK_TAGS = {"AudioTrack", "GroupTrack", "MidiTrack"}
-DEVICE_ID_RE = re.compile(r'(<[A-Za-z_][\w:.-]*\b[^>]*\bId=")(\d+)(")')
 
 
 @dataclasses.dataclass(frozen=True)
@@ -121,33 +121,21 @@ def copy_first_tag(source: str, target: str, tag: str) -> str:
 
 
 def direct_device_blocks(track_block: str) -> list[str]:
-    devices_range = live_set.first_tag_range(track_block, "Devices")
-    if devices_range is None:
+    inner_range = live_set.tag_inner_range(track_block, "Devices")
+    if inner_range is None:
         return []
-    start, end = devices_range
-    open_end = track_block.find(">", start) + 1
-    close_start = track_block.rfind("</Devices>", start, end)
-    if close_start < open_end:
-        return []
-    return live_set.direct_child_blocks(track_block[open_end:close_start])
+    return live_set.direct_child_blocks(track_block[inner_range[0] : inner_range[1]])
 
 
 def replace_direct_devices(track_block: str, devices: list[str]) -> str:
-    devices_range = live_set.first_tag_range(track_block, "Devices")
-    if devices_range is None:
-        raise ValueError("Track had no direct <Devices> list.")
-    start, end = devices_range
-    open_end = track_block.find(">", start) + 1
-    close_start = track_block.rfind("</Devices>", start, end)
-    if close_start < open_end:
+    inner_range = live_set.tag_inner_range(track_block, "Devices")
+    if inner_range is None:
         raise ValueError("Track direct <Devices> list was self-closing.")
-    content = "\n".join(devices)
-    replacement = f"{track_block[start:open_end]}\n{content}\n{track_block[close_start:end]}"
-    return live_set.replace_range(track_block, devices_range, replacement)
+    return live_set.replace_range(track_block, inner_range, "\n" + "\n".join(devices) + "\n")
 
 
 def assign_device_ids(devices: list[str]) -> list[str]:
-    return [DEVICE_ID_RE.sub(rf"\g<1>{index}\3", block, count=1) for index, block in enumerate(devices)]
+    return [live_set.set_root_id(block, index) for index, block in enumerate(devices)]
 
 
 def set_track_name(block: str, name: str) -> str:

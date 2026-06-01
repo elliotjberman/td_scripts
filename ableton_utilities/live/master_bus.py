@@ -3,14 +3,12 @@
 from __future__ import annotations
 
 import dataclasses
-import re
 
 from ableton_utilities import live_set
 
 
 TDA_MASTER_MARKER = "TDA_Master.amxd"
 TDA_MASTER_REPORT = "TDAMaster -> Master"
-DEVICE_ID_RE = re.compile(r'(<[A-Za-z_][\w:.-]*\b[^>]*\bId=")(\d+)(")')
 
 
 @dataclasses.dataclass(frozen=True)
@@ -34,7 +32,7 @@ def ensure_tda_master(xml: str, template_xml: str, next_global_id: int) -> Maste
         return MasterBusResult(xml, next_global_id, False, ["No template TDAMaster device was found."])
 
     device, next_global_id, _ = live_set.remap_global_ids_with_map(template_device, next_global_id)
-    device = _remap_nonzero_lom_ids(device, _next_lom_id(xml))
+    device = live_set.remap_nonzero_lom_ids(device, live_set.next_lom_id(xml))
     patched_master = _append_master_device(master, device)
     xml = live_set.replace_range(xml, master_range, patched_master)
     return MasterBusResult(xml, next_global_id, True, [])
@@ -59,8 +57,8 @@ def _template_tda_master_device(xml: str) -> str | None:
 def _append_master_device(master: str, device: str) -> str:
     devices_range = _master_devices_range(master)
     devices = master[devices_range[0] : devices_range[1]]
-    children = _direct_children(devices)
-    device = _set_root_device_id(device, _next_device_id(children))
+    children = live_set.direct_child_blocks(live_set.tag_contents(devices))
+    device = live_set.set_root_id(device, live_set.next_root_id(children))
     close = devices.rfind("</Devices>")
     line_sep = "\r\n" if "\r\n" in devices else "\n"
     patched_devices = f"{devices[:close]}{line_sep}{device}{line_sep}{devices[close:]}"
@@ -112,43 +110,3 @@ def _tag_range_from_open(xml: str, start: int, end: int) -> tuple[int, int]:
         elif not self_closing:
             depth += 1
     raise ValueError(f"No matching close tag for <{tag}>.")
-
-
-def _direct_children(block: str) -> list[str]:
-    open_end = block.find(">") + 1
-    close = block.rfind("</")
-    return live_set.direct_child_blocks(block[open_end:close])
-
-
-def _next_device_id(devices: list[str]) -> int:
-    ids = []
-    for device in devices:
-        match = re.match(r'<[A-Za-z_][\w:.-]*\b[^>]*\bId="(\d+)"', device)
-        if match:
-            ids.append(int(match.group(1)))
-    return max(ids, default=-1) + 1
-
-
-def _set_root_device_id(device: str, device_id: int) -> str:
-    return DEVICE_ID_RE.sub(rf"\g<1>{device_id}\3", device, count=1)
-
-
-def _remap_nonzero_lom_ids(block: str, first_lom_id: int) -> str:
-    next_lom_id = first_lom_id
-    lomid_map: dict[str, str] = {}
-
-    def replace(match: re.Match[str]) -> str:
-        nonlocal next_lom_id
-        old_id = match.group(2)
-        if old_id == "0":
-            return match.group(0)
-        if old_id not in lomid_map:
-            lomid_map[old_id] = str(next_lom_id)
-            next_lom_id += 1
-        return f"{match.group(1)}{lomid_map[old_id]}{match.group(3)}"
-
-    return re.sub(r'(<LomId\b[^>]*\bValue=")(\d+)(")', replace, block)
-
-
-def _next_lom_id(xml: str) -> int:
-    return max((int(value) for value in re.findall(r'<LomId\b[^>]*\bValue="(\d+)"', xml)), default=0) + 1

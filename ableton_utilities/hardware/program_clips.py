@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 
 from ableton_utilities import live_set
-from ableton_utilities.hardware.program_types import MidiProgramValues, ProgramSelection
+from ableton_utilities.hardware.programs import MidiProgramValues, ProgramSelection
 
 
 VALUE_TAGS = ("BankSelectCoarse", "BankSelectFine", "ProgramChange")
@@ -35,11 +35,11 @@ def _session_slot_list_range(track_block: str) -> tuple[int, int] | None:
 
 
 def _prepare_first_scene(slot_list: str, template: str | None, selection: ProgramSelection) -> str:
-    inner_range = _tag_inner_range(slot_list, "ClipSlotList")
+    inner_range = live_set.tag_inner_range(slot_list, "ClipSlotList")
     if inner_range is None:
         return slot_list
     inner = slot_list[inner_range[0] : inner_range[1]]
-    child_ranges = _direct_child_ranges(inner)
+    child_ranges = live_set.direct_child_ranges(inner)
     if not child_ranges:
         return slot_list
 
@@ -172,37 +172,3 @@ def _set_value_tag(xml: str, tag: str, value: str) -> str:
 def _fill_empty_clip_slot(slot_block: str, clip: str) -> str:
     pattern = re.compile(r"(<ClipSlot>\s*)<Value\s*/>(\s*</ClipSlot>)", re.DOTALL)
     return pattern.sub(lambda match: f"{match.group(1)}<Value>\n{clip}\n</Value>{match.group(2)}", slot_block, count=1)
-
-
-def _tag_inner_range(xml: str, tag: str) -> tuple[int, int] | None:
-    tag_range = live_set.first_tag_range(xml, tag)
-    if tag_range is None:
-        return None
-    open_end = xml.find(">", tag_range[0]) + 1
-    close_start = xml.rfind(f"</{tag}>", tag_range[0], tag_range[1])
-    if close_start < open_end:
-        return None
-    return open_end, close_start
-
-
-def _direct_child_ranges(xml: str) -> list[tuple[int, int]]:
-    ranges: list[tuple[int, int]] = []
-    stack: list[str] = []
-    start: int | None = None
-    for match in live_set.XML_TAG_RE.finditer(xml):
-        closing, tag, _attrs, self_closing = match.groups()
-        if closing:
-            if stack and stack[-1] == tag:
-                stack.pop()
-                if not stack and start is not None:
-                    ranges.append((start, match.end()))
-                    start = None
-            continue
-        if not stack:
-            start = match.start()
-        if not self_closing:
-            stack.append(tag)
-        elif not stack and start is not None:
-            ranges.append((start, match.end()))
-            start = None
-    return ranges

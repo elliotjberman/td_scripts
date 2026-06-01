@@ -16,6 +16,8 @@ GLOBAL_TARGET_RE = re.compile(
     r'(<(?:Pointee|(?:[A-Za-z_][\w:.-]*)?AutomationTarget|(?:[A-Za-z_][\w:.-]*)?ModulationTarget|'
     r'ControllerTargets\.\d+)\b[^>]*\bId=")(\d+)(")'
 )
+LOM_ID_RE = re.compile(r'(<LomId\b[^>]*\bValue=")(\d+)(")')
+ROOT_ID_RE = re.compile(r'(<[A-Za-z_][\w:.-]*\b[^>]*\bId=")(\d+)(")')
 
 
 @dataclasses.dataclass(frozen=True)
@@ -158,8 +160,31 @@ def replace_first_tag(xml: str, tag: str, replacement: str) -> str:
     return replace_range(xml, item_range, replacement)
 
 
+def tag_inner_range(xml: str, tag: str) -> tuple[int, int] | None:
+    item_range = first_tag_range(xml, tag)
+    if item_range is None:
+        return None
+    open_end = xml.find(">", item_range[0]) + 1
+    close_start = xml.rfind(f"</{tag}>", item_range[0], item_range[1])
+    if close_start < open_end:
+        return None
+    return open_end, close_start
+
+
+def tag_contents(block: str) -> str:
+    open_end = block.find(">") + 1
+    close_start = block.rfind("</")
+    if open_end <= 0 or close_start < open_end:
+        return ""
+    return block[open_end:close_start]
+
+
 def direct_child_blocks(xml: str) -> list[str]:
-    blocks: list[str] = []
+    return [xml[start:end] for start, end in direct_child_ranges(xml)]
+
+
+def direct_child_ranges(xml: str) -> list[tuple[int, int]]:
+    ranges: list[tuple[int, int]] = []
     stack: list[str] = []
     start: int | None = None
     for match in XML_TAG_RE.finditer(xml):
@@ -168,7 +193,7 @@ def direct_child_blocks(xml: str) -> list[str]:
             if stack and stack[-1] == tag:
                 stack.pop()
                 if not stack and start is not None:
-                    blocks.append(xml[start : match.end()])
+                    ranges.append((start, match.end()))
                     start = None
             continue
         if not stack:
@@ -176,9 +201,9 @@ def direct_child_blocks(xml: str) -> list[str]:
         if not self_closing:
             stack.append(tag)
         elif not stack and start is not None:
-            blocks.append(xml[start : match.end()])
+            ranges.append((start, match.end()))
             start = None
-    return blocks
+    return ranges
 
 
 def next_pointee_id(xml: str) -> int:
@@ -213,6 +238,47 @@ def remap_global_ids_with_map(xml: str, first_id: int) -> tuple[str, int, dict[s
         return f"{match.group(1)}{id_map[old_id]}{match.group(3)}"
 
     return GLOBAL_TARGET_RE.sub(replace_global_id, xml), next_id, id_map
+
+
+def next_lom_id(xml: str) -> int:
+    return max((int(value) for value in re.findall(r'<LomId\b[^>]*\bValue="(\d+)"', xml)), default=0) + 1
+
+
+def remap_nonzero_lom_ids(block: str, first_lom_id: int) -> str:
+    next_id = first_lom_id
+    id_map: dict[str, str] = {}
+
+    def replace(match: re.Match[str]) -> str:
+        nonlocal next_id
+        old_id = match.group(2)
+        if old_id == "0":
+            return match.group(0)
+        if old_id not in id_map:
+            id_map[old_id] = str(next_id)
+            next_id += 1
+        return f"{match.group(1)}{id_map[old_id]}{match.group(3)}"
+
+    return LOM_ID_RE.sub(replace, block)
+
+
+def next_root_id(blocks: list[str]) -> int:
+    ids = [int(match.group(2)) for block in blocks if (match := ROOT_ID_RE.match(block))]
+    return max(ids, default=-1) + 1
+
+
+def set_root_id(block: str, item_id: int) -> str:
+    patched, count = ROOT_ID_RE.subn(rf"\g<1>{item_id}\3", block, count=1)
+    if count != 1:
+        raise ValueError("Could not set root Id.")
+    return patched
+
+
+def line_indent(text: str, index: int) -> str:
+    line_start = text.rfind("\n", 0, index)
+    if line_start < 0:
+        return ""
+    match = re.match(r"[\t ]*", text[line_start + 1 : index])
+    return "" if match is None else match.group(0)
 
 
 def escape_attr(value: str) -> str:

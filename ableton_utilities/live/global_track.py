@@ -41,7 +41,7 @@ def ensure_global_track(
     block = _set_track_id(template_global.block, next_track_id)
     block = _set_track_group_id(block, -1)
     block, next_global_id, _ = live_set.remap_global_ids_with_map(block, next_global_id)
-    block = _remap_nonzero_lom_ids(block, _next_lom_id(xml))
+    block = live_set.remap_nonzero_lom_ids(block, live_set.next_lom_id(xml))
     block = _clear_map8_targets(block)
     block, next_global_id, warnings = _normalize_global_track(block, template_xml, xml, next_global_id)
     insert_at = max((track.end for track in tracks), default=len(xml))
@@ -85,7 +85,7 @@ def _normalize_global_track(
     if setlist is None:
         return block, next_global_id, ["No template setlist-device.amxd was found for Global."]
     setlist, next_global_id, _ = live_set.remap_global_ids_with_map(setlist, next_global_id)
-    setlist = _remap_nonzero_lom_ids(setlist, _next_lom_id(f"{full_xml}{block}"))
+    setlist = live_set.remap_nonzero_lom_ids(setlist, live_set.next_lom_id(f"{full_xml}{block}"))
     try:
         block = _insert_before_map8(block, setlist)
     except ValueError as exc:
@@ -105,7 +105,7 @@ def _ensure_midi_track_tail(block: str) -> str:
     if insert_at < 0:
         return block
     line_sep = "\r\n" if "\r\n" in block else "\n"
-    indent = _line_indent(block, insert_at)
+    indent = live_set.line_indent(block, insert_at)
     tail = ""
     if "<ReWireSlaveMidiTargetId " not in block:
         tail += f'{indent}<ReWireSlaveMidiTargetId Value="3" />{line_sep}'
@@ -132,14 +132,14 @@ def _template_setlist_device(xml: str) -> str | None:
 def _insert_before_map8(block: str, device: str) -> str:
     devices_range = _global_devices_range(block)
     devices = block[devices_range[0] : devices_range[1]]
-    children = live_set.direct_child_blocks(_tag_contents(devices))
+    children = live_set.direct_child_blocks(live_set.tag_contents(devices))
     map8_child = next(
         (child for child in children if child.lstrip().startswith("<AudioEffectGroupDevice") and "Map8.amxd" in child),
         None,
     )
     if map8_child is None:
         raise ValueError("Global track had no direct Live_Macro/Map8 rack for setlist-device insertion.")
-    device = _set_root_device_id(device, _next_device_id(children))
+    device = live_set.set_root_id(device, live_set.next_root_id(children))
     insert_at = devices.find(map8_child)
     line_sep = "\r\n" if "\r\n" in devices else "\n"
     patched = f"{devices[:insert_at]}{device}{line_sep}{devices[insert_at:]}"
@@ -149,51 +149,10 @@ def _insert_before_map8(block: str, device: str) -> str:
 def _global_devices_range(block: str) -> tuple[int, int]:
     for devices_range in live_set.tag_ranges(block, {"Devices"}):
         devices = block[devices_range[0] : devices_range[1]]
-        children = live_set.direct_child_blocks(_tag_contents(devices))
+        children = live_set.direct_child_blocks(live_set.tag_contents(devices))
         if any(child.lstrip().startswith("<AudioEffectGroupDevice") and "Map8.amxd" in child for child in children):
             return devices_range
     raise ValueError("Global track had no direct Devices list containing Live_Macro/Map8.")
-
-
-def _tag_contents(block: str) -> str:
-    return block[block.find(">") + 1 : block.rfind("</")]
-
-
-def _next_device_id(devices: list[str]) -> int:
-    ids = [
-        int(match.group(1))
-        for device in devices
-        if (match := re.match(r'<[A-Za-z_][\w:.-]*\b[^>]*\bId="(\d+)"', device))
-    ]
-    return max(ids, default=-1) + 1
-
-
-def _set_root_device_id(device: str, device_id: int) -> str:
-    return re.sub(r'(<[A-Za-z_][\w:.-]*\b[^>]*\bId=")\d+(")', rf"\g<1>{device_id}\2", device, count=1)
-
-
-def _line_indent(text: str, index: int) -> str:
-    line_start = text.rfind("\n", 0, index)
-    if line_start < 0:
-        return ""
-    return re.match(r"[\t ]*", text[line_start + 1 : index]).group(0)
-
-
-def _remap_nonzero_lom_ids(block: str, first_lom_id: int) -> str:
-    next_lom_id = first_lom_id
-    lomid_map: dict[str, str] = {}
-
-    def replace(match: re.Match[str]) -> str:
-        nonlocal next_lom_id
-        old_id = match.group(2)
-        if old_id == "0":
-            return match.group(0)
-        if old_id not in lomid_map:
-            lomid_map[old_id] = str(next_lom_id)
-            next_lom_id += 1
-        return f"{match.group(1)}{lomid_map[old_id]}{match.group(3)}"
-
-    return re.sub(r'(<LomId\b[^>]*\bValue=")(\d+)(")', replace, block)
 
 
 def _clear_map8_targets(block: str) -> str:
@@ -227,7 +186,3 @@ def _clear_map8_blob_toggles(block: str) -> str:
     chunks = [encoded[index : index + 80] for index in range(0, len(encoded), 80)]
     replacement = match.group(1) + (line_sep + indent).join(chunks) + match.group(3)
     return block[: match.start()] + replacement + block[match.end() :]
-
-
-def _next_lom_id(xml: str) -> int:
-    return max((int(value) for value in re.findall(r'<LomId\b[^>]*\bValue="(\d+)"', xml)), default=0) + 1

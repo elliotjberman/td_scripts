@@ -74,7 +74,7 @@ def _ensure_roll_volume_target(xml: str) -> tuple[str, str | None, list[str]]:
     if target_track is None:
         return xml, None, ["No ControllerUtils > VSDC_IN track was found for RollVol mapping."]
 
-    block, lom_id = _ensure_velocity_maxout_lom(target_track.block, _next_lom_id(xml))
+    block, lom_id = _ensure_velocity_maxout_lom(target_track.block, str(live_set.next_lom_id(xml)))
     if lom_id is None:
         return xml, None, ["VSDC_IN had no MidiVelocity MaxOut/Out Hi parameter for RollVol mapping."]
     if block != target_track.block:
@@ -226,12 +226,6 @@ def _populated_idref_list_range(block: str) -> tuple[int, int] | None:
 
 def _find_track(tracks: list[TrackBlock], name: str, group_id: int | None = None) -> TrackBlock | None:
     return next((track for track in tracks if track.name == name and (group_id is None or track.group_id == group_id)), None)
-
-
-def _next_lom_id(xml: str) -> str:
-    return str(max((int(value) for value in re.findall(r'<LomId\b[^>]*\bValue="(\d+)"', xml)), default=0) + 1)
-
-
 def _lom_id(xml: str) -> str | None:
     try:
         return ET.fromstring(xml).find("./LomId").attrib.get("Value")

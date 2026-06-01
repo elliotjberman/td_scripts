@@ -2,15 +2,40 @@
 
 from __future__ import annotations
 
+import dataclasses
 import re
-
-from ableton_utilities.hardware.program_clips import apply_program_selection
-from ableton_utilities.hardware.program_types import MidiProgramValues, ProgramSelection
 
 
 PAIR_RE = re.compile(r"(?<!\d)(\d{1,3})\s*-\s*(\d{1,3})(?!\d)")
 MOOG_PROGRAM_RE = re.compile(r"\bmoog(?:live|out|trig)?[\s_-]*\(?(\d{1,3})\)?\s*$", re.IGNORECASE)
 TETRA_BANKS = {1, 2}
+
+
+@dataclasses.dataclass(frozen=True)
+class MidiProgramValues:
+    bank_select_coarse: int
+    bank_select_fine: int
+    program_change: int
+
+
+@dataclasses.dataclass(frozen=True)
+class ProgramSelection:
+    synth_key: str
+    program: int
+    bank: int | None
+    source_name: str
+    source_order: str
+
+    def clip_values(self) -> MidiProgramValues:
+        if self.synth_key == "tetra":
+            bank = -1 if self.bank is None else self.bank - 1
+            return MidiProgramValues(-1, bank, self.program - 1)
+        return MidiProgramValues(-1, -1, self.program - 1)
+
+    def dummy_clip_name(self) -> str:
+        if self.bank is None:
+            return f"PC {self.program}"
+        return f"PC {self.bank}-{self.program}"
 
 
 def parse_track_program(name: str, synth_key: str) -> ProgramSelection | None:

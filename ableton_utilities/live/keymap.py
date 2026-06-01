@@ -71,7 +71,7 @@ def _patch_key_block(block: str, key: str) -> str:
 
 def _remote_selection_key_block(device: str, insert_at: int, key: str) -> str:
     line_sep = "\r\n" if "\r\n" in device else "\n"
-    indent = _line_indent(device, insert_at)
+    indent = live_set.line_indent(device, insert_at)
     child_indent = indent + "\t"
     return (
         f"{indent}<RemoteSelectionKeyMidi>{line_sep}"
@@ -84,10 +84,3 @@ def _remote_selection_key_block(device: str, insert_at: int, key: str) -> str:
         f'{child_indent}<ControllerMapMode Value="0" />{line_sep}'
         f"{indent}</RemoteSelectionKeyMidi>{line_sep}"
     )
-
-
-def _line_indent(text: str, index: int) -> str:
-    line_start = text.rfind("\n", 0, index)
-    if line_start < 0:
-        return ""
-    return re.match(r"[\t ]*", text[line_start + 1 : index]).group(0)
