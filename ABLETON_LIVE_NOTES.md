@@ -107,6 +107,10 @@ does not stop the drum controller from firing during a live set.
 Song-specific Global macros, such as DrumMorph, PercRoll, DrumFilter, or
 DrumVerb, should be applied to validation copies of the target `.als` set rather
 than added to the conversion boilerplate.
+When applying song-specific Map8 rows, use the known slot-object order
+`obj-16`, `obj-5`, `obj-62`, `obj-10`, `obj-11`, `obj-12`, `obj-13`, `obj-8`.
+In particular, row 3 is `obj-62`; using `obj-10` for row 3 shifts later
+mappings down by one row in the Map8 UI.
 
 The Global macro rack should also have `/` mapped to its
 `RemoteSelectionKeyMidi`, matching the reference sets' blue-hand/focus shortcut.

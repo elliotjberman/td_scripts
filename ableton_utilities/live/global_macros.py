@@ -10,8 +10,18 @@ from ableton_utilities import live_set
 from ableton_utilities.hardware_xml import TrackBlock, parse_tracks
 
 
+MAP8_SLOT_OBJECTS = (
+    "obj-16",
+    "obj-5",
+    "obj-62",
+    "obj-10",
+    "obj-11",
+    "obj-12",
+    "obj-13",
+    "obj-8",
+)
 ROLL_VOLUME_TARGET = "ControllerUtils > VSDC_IN > MidiVelocity > MaxOut/Out Hi"
-ROLL_VOLUME_SLOT_OBJECT = "obj-16"
+ROLL_VOLUME_SLOT_OBJECT = MAP8_SLOT_OBJECTS[0]
 ROLL_VOLUME_MIN_PERCENT = "1"
 
 
