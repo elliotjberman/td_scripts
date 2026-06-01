@@ -7,5 +7,3 @@ See [TouchDesigner development notes](TOUCHDESIGNER_DEV_NOTES.md) before changin
 
 See `ABLETON_LIVE_NOTES.md` for Ableton hardware/live-set conversion notes.
 See `ABLETON_AUTOMATION_XML_NOTES.md` for the automation-copying handoff model.
-The local Codex skill `ableton-live-xml` documents the safe workflow for future
-Ableton `.als` XML mapping changes.
