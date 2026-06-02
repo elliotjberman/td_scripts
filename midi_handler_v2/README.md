@@ -17,9 +17,21 @@ This creates or updates `AbletonHookupManager` in the current component. The man
 - `Ctrl+Shift+M` opens the Ableton source picker.
 - `Ctrl+E` opens the scaled-envelope creator.
 - `Ctrl+Shift+P` opens the parameter binder for the last edited parameter.
+- `Ctrl+Shift+K` opens the Ableton parameter source picker for `Global / Live_Macro`.
 - Each source wrapper has an `Open Mapper` pulse for per-source note routing.
 
 Mappings are stored on each source wrapper in `mappings_json`. Runtime routing should read that local mapping data instead of relying on external TSV files.
+
+## Direct Manager Calls
+
+These are the agent-friendly entrypoints exposed by `AbletonHookupManagerExt`:
+
+```python
+manager.ext.AbletonHookupManagerExt.AbletonGlobalMacroParameters()
+manager.ext.AbletonHookupManagerExt.AbletonParamPickerInfo()
+manager.ext.AbletonHookupManagerExt.CreateAbletonParamSource("Global", "Live_Macro", "DrumVerb")
+manager.ext.AbletonHookupManagerExt.CreateAndConnectAbletonParam("Global", "Live_Macro", "DrumVerb", op("math5"), output_name="chan1")
+```
 
 ## Setup vs Performance
 
