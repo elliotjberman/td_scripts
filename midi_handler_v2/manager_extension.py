@@ -25,6 +25,8 @@ class AbletonHookupManagerExt:
 		self._name_prompt_module().ensure_envelope_name_prompt(self)
 		self._mapping_modal_module().ensure_mapping_editor(self)
 		self._parameter_mapper_module().ensure_parameter_mapper(self)
+		self._ableton_param_picker_module().ensure_picker(self)
+		self.AbletonGuard()
 
 	def OpenSourcePicker(self):
 		info = self.SourcePickerInfo()
@@ -167,6 +169,47 @@ class AbletonHookupManagerExt:
 	def OpenParameterMapper(self):
 		return self._parameter_mapper_module().open_parameter_mapper(self)
 
+	def OpenAbletonParamPicker(self):
+		return self._ableton_param_picker_module().open_picker(self)
+
+	def SelectAbletonParam(self, parameter_name):
+		return self._ableton_param_picker_module().select_parameter(self, parameter_name)
+
+	def AbletonGlobalMacroParameters(self):
+		return self._ableton_param_picker_module().global_macro_parameters(self)
+
+	def AbletonParamPickerInfo(self):
+		return self._ableton_param_picker_module().picker_info(self)
+
+	def AbletonGuard(self):
+		module = self._ableton_guard_module()
+		return module.ensure_guard(self.ownerComp.parent(), self._home())
+
+	def RefreshAbletonGuard(self):
+		return self.AbletonGuard().ext.AbletonGuardExt.Refresh()
+
+	def ArmAbleton(self):
+		return self.AbletonGuard().ext.AbletonGuardExt.Arm()
+
+	def DisarmAbleton(self):
+		return self.AbletonGuard().ext.AbletonGuardExt.Disarm()
+
+	def CreateAbletonParamSource(self, track_name="", device_name="", parameter_name="", name=None):
+		factory = self._ableton_param_factory_module()
+		factory.op = op
+		return factory.create_param_source(self.ownerComp, track_name, device_name, parameter_name, name=name)
+
+	def CreateAndConnectAbletonParam(self, track_name, device_name, parameter_name, target_path, input_index=0, name=None, output_name=""):
+		source = self.CreateAbletonParamSource(track_name, device_name, parameter_name, name=name)
+		if output_name and source.par["Outputname"] is not None:
+			source.par.Outputname = output_name
+		target = target_path if hasattr(target_path, "inputConnectors") else op(str(target_path))
+		if target is None:
+			raise RuntimeError("Target operator not found: {}".format(target_path))
+		output = source.op("out1") or source
+		target.inputConnectors[int(input_index)].connect(output)
+		return source
+
 	def ApplyParameterBinding(self, output_path):
 		return self._parameter_mapper_module().apply_binding(self, output_path)
 
@@ -182,6 +225,10 @@ class AbletonHookupManagerExt:
 			"Addenvelope": self.CreateScaledEnvelope,
 			"Refreshtracks": self.AbletonTrackNames,
 			"Bindparam": self.OpenParameterMapper,
+			"Addparam": self.OpenAbletonParamPicker,
+			"Refreshguard": self.RefreshAbletonGuard,
+			"Armableton": self.ArmAbleton,
+			"Disarmableton": self.DisarmAbleton,
 		}
 		action = actions.get(getattr(par, "name", ""))
 		if action:
@@ -204,6 +251,8 @@ class AbletonHookupManagerExt:
 			self.CreateScaledEnvelope()
 		elif action == hotkeys.ACTION_BIND_PARAMETER:
 			self.OpenParameterMapper()
+		elif action == hotkeys.ACTION_OPEN_ABLETON_PARAM_PICKER:
+			self.OpenAbletonParamPicker()
 
 	def _ensure_parameters(self):
 		page = self._page("Ableton Hookup")
@@ -212,6 +261,10 @@ class AbletonHookupManagerExt:
 			("Addenvelope", "Add Scaled Envelope"),
 			("Refreshtracks", "Refresh Tracks"),
 			("Bindparam", "Bind Parameter..."),
+			("Addparam", "Add Ableton Param..."),
+			("Refreshguard", "Refresh Guard"),
+			("Armableton", "Arm Ableton"),
+			("Disarmableton", "Disarm Ableton"),
 		):
 			if self.ownerComp.par[name] is None:
 				page.appendPulse(name, label=label)
@@ -233,7 +286,7 @@ class AbletonHookupManagerExt:
 		callbacks = self.ownerComp.op("manager_par_callbacks")
 		if callbacks is None:
 			callbacks = self.ownerComp.create(parameterexecuteDAT, "manager_par_callbacks")
-		callbacks.par.pars = "Addsource Addenvelope Refreshtracks Bindparam"
+		callbacks.par.pars = "Addsource Addenvelope Refreshtracks Bindparam Addparam Refreshguard Armableton Disarmableton"
 		callbacks.par.fromop = self.ownerComp.path
 		callbacks.par.op = self.ownerComp.path
 		callbacks.par.onpulse = True
@@ -316,8 +369,24 @@ class AbletonHookupManagerExt:
 	def _parameter_mapper_module(self):
 		return self._module("midi_handler_v2_parameter_mapper", "parameter_mapper.py")
 
+	def _ableton_param_factory_module(self):
+		return self._root_module("ableton_param_v2_factory", "ableton_param_v2", "factory.py")
+
+	def _ableton_param_picker_module(self):
+		return self._root_module("ableton_param_v2_macro_picker", "ableton_param_v2", "macro_picker.py")
+
+	def _ableton_guard_module(self):
+		return self._root_module("td_ableton_ableton_guard", "td_ableton", "ableton_guard.py")
+
 	def _module(self, module_name, *parts):
 		path = self._script_root().joinpath(*parts)
+		return self._load_module(module_name, path)
+
+	def _root_module(self, module_name, *parts):
+		path = self._script_root().parent.joinpath(*parts)
+		return self._load_module(module_name, path)
+
+	def _load_module(self, module_name, path):
 		mtime = path.stat().st_mtime if path.exists() else 0
 		cache_key = (module_name, str(path), mtime)
 		cached = self._module_cache.get(module_name)
@@ -325,6 +394,7 @@ class AbletonHookupManagerExt:
 			return cached["module"]
 		spec = importlib.util.spec_from_file_location(module_name, str(path))
 		module = importlib.util.module_from_spec(spec)
+		module.__dict__.update(self._td_environment())
 		sys.modules[module_name] = module
 		spec.loader.exec_module(module)
 		self._module_cache[module_name] = {"key": cache_key, "module": module}
@@ -346,8 +416,14 @@ class AbletonHookupManagerExt:
 				return candidate
 		return candidates[0]
 
+	def _home(self):
+		value = self.ownerComp.fetch("home", "")
+		if value:
+			return str(value)
+		return str(Path.home())
+
 	def _td_environment(self):
-		return {"op": op, "parent": parent, "me": me, "mod": mod, "project": project, "ui": ui, "run": run, "absTime": absTime, "ParMode": ParMode}
+		return {"op": op, "parent": parent, "me": me, "mod": mod, "project": project, "ui": ui, "run": run, "absTime": absTime, "ParMode": ParMode, "app": app}
 
 	def _page(self, name):
 		for page in self.ownerComp.customPages:

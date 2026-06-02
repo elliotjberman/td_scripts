@@ -1,6 +1,8 @@
 from pathlib import Path
+import importlib.util
 import os
 import re
+import sys
 import td
 
 
@@ -114,9 +116,14 @@ def _configure_ableton_midi(wrapper, ableton_midi, track_name, home):
 	callback.par.loadonstartpulse.pulse()
 	callback.par.language = "python"
 
-	_set_menu_parameter(ableton_midi, "Device", "None")
-	_refresh_lom(ableton_midi)
-	_set_menu_parameter(ableton_midi, "Track", track_name)
+	result = _safe_bind_module().bind_midi(
+		ableton_midi,
+		track_name,
+		device_name="",
+		connect=False,
+		require_device=False,
+	)
+	wrapper.store("safe_bind_result", result)
 	_set_parameter_value(ableton_midi, "Callbackdat", callback)
 	_set_parameter_value(ableton_midi, "Enablecallbacks", True)
 	_remove_unused_callback_dats(wrapper, callback)
@@ -152,6 +159,8 @@ def _ensure_tda_midi_device(ableton_midi, track_name, add_if_missing=True):
 	if _source_has_tda_midi_device(track_name):
 		_refresh_lom(ableton_midi)
 		return _select_tda_midi_device(ableton_midi, track_name)
+	if not _track_available(track_name):
+		return False
 	if not add_if_missing:
 		return False
 	pulse = ableton_midi.par["Adddevice"]
@@ -187,7 +196,12 @@ def onFrameStart(frame):
 	track_name = wrapper.fetch('track_name', '')
 	_set_bool(midi, 'Connect', False)
 	_refresh_lom(midi, track_name)
-	_set_menu(midi, 'Track', track_name)
+	if not _set_menu(midi, 'Track', track_name):
+		wrapper.store('tda_midi_ready', False)
+		wrapper.store('tda_midi_status', 'missing_track')
+		if attempts >= 120:
+			me.par.active = False
+		return
 	_refresh_lom(midi, track_name)
 	if _set_menu(midi, 'Device', 'TdaMIDI'):
 		_set_bool(midi, 'Enablecallbacks', True)
@@ -268,6 +282,11 @@ def _select_tda_midi_device(ableton_midi, track_name):
 
 def _source_has_tda_midi_device(track_name):
 	return any("ID_TDA_MIDI" in device.get("aPars", {}) for device in _walk_track_devices(track_name))
+
+
+def _track_available(track_name):
+	info = _safe_bind_module().song_info()
+	return _safe_bind_module().track_data(info, track_name) is not None
 
 
 def _walk_track_devices(track_name):
@@ -379,6 +398,31 @@ def _home(manager_comp):
 def _home_expr(home, file_name):
 	escaped = home.replace("\\", "\\\\").replace('"', '\\"')
 	return f'"{escaped}/td_scripts/midi_handler_v2/{file_name}"'
+
+
+_SAFE_BIND = None
+
+
+def _safe_bind_module():
+	global _SAFE_BIND
+	if _SAFE_BIND is not None:
+		return _SAFE_BIND
+	candidates = []
+	try:
+		candidates.append(Path(__file__).resolve().parent.parent / "td_ableton" / "safe_bind.py")
+	except Exception:
+		pass
+	candidates.append(Path.home() / "td_scripts" / "td_ableton" / "safe_bind.py")
+	for path in candidates:
+		if path.exists():
+			spec = importlib.util.spec_from_file_location("td_ableton_safe_bind", str(path))
+			module = importlib.util.module_from_spec(spec)
+			module.__dict__.update({"op": op})
+			sys.modules["td_ableton_safe_bind"] = module
+			spec.loader.exec_module(module)
+			_SAFE_BIND = module
+			return module
+	raise RuntimeError("td_ableton/safe_bind.py not found")
 
 
 def _ableton_midi_tox_path():

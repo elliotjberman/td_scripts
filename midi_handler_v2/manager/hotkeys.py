@@ -1,6 +1,7 @@
 ACTION_OPEN_SOURCE_PICKER = "open_source_picker"
 ACTION_CREATE_SCALED_ENVELOPE = "create_scaled_envelope"
 ACTION_BIND_PARAMETER = "bind_parameter"
+ACTION_OPEN_ABLETON_PARAM_PICKER = "open_ableton_param_picker"
 
 DEBUG_KEYS = ("1", "2", "3", "4", "5", "6", "7", "8", "9", "0")
 
@@ -8,6 +9,7 @@ _ACTION_CANDIDATES = (
 	(ACTION_OPEN_SOURCE_PICKER, ("ctrl.shift.m", "ctrl.alt.m", "cmd.alt.m", "ctrl.cmd.m", "cmd.m")),
 	(ACTION_CREATE_SCALED_ENVELOPE, ("ctrl.e", "ctrl.shift.e")),
 	(ACTION_BIND_PARAMETER, ("ctrl.shift.p",)),
+	(ACTION_OPEN_ABLETON_PARAM_PICKER, ("ctrl.shift.k", "ctrl.alt.k")),
 )
 
 
