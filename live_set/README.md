@@ -58,7 +58,8 @@ The wrapper auto-detects `~/setlist_manager` or a sibling `../setlist_manager`
 repo. When that server exposes `GET /status`, the dashboard uses it for server
 health and the actual `sets` order from `setlist.json`. If the server is alive
 but the local `setlist.json` is missing or invalid, the server row shows that
-configuration error directly.
+configuration error directly. `serverPort` is optional for `setlist_manager`;
+when it is omitted, the wrapper assumes the server's default `8000` port.
 
 Use `LIVE_SET_STATUS_URL` to override the status endpoint, `LIVE_SET_SETLIST_URL`
 for a separate setlist JSON endpoint, `LIVE_SET_SETLIST` for a JSON/TSV file, or

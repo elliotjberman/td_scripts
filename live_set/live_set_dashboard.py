@@ -204,6 +204,9 @@ def server_status(
         data = server_snapshot.get("data")
         if isinstance(data, dict) and data.get("ok") is False:
             detail = first_text(data, ("error", "message")) or f"status {server_snapshot.get('url')}"
+            if is_default_server_port_notice(detail):
+                port = data.get("serverPort") or launch_live_set.DEFAULT_SETLIST_SERVER_PORT
+                return status("Server", "ok", f"default port {port}")
             return status("Server", "fail", detail)
         return status("Server", "ok", f"status {server_snapshot.get('url')}")
     if args.server_ready_url:
@@ -231,6 +234,10 @@ def process_status(label: str, process_pattern: str, skipped: bool) -> dict[str,
 
 def status(resource: str, state: str, detail: str) -> dict[str, str]:
     return {"resource": resource, "state": state, "detail": detail}
+
+
+def is_default_server_port_notice(detail: str) -> bool:
+    return "serverPort missing" in detail
 
 
 def check_url(url: str) -> tuple[bool, str]:

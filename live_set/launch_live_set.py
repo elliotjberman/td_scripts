@@ -25,6 +25,7 @@ DEFAULT_SERVER_DIRS = (
     REPO_ROOT.parent / "setlist_manager",
 )
 DEFAULT_SERVER_HOST = "127.0.0.1"
+DEFAULT_SETLIST_SERVER_PORT = 8000
 
 
 class LaunchError(RuntimeError):
@@ -254,7 +255,19 @@ def infer_server_port(server_cwd: Path | None) -> int | None:
     port = read_setlist_config(server_cwd).get("serverPort")
     if isinstance(port, int):
         return port
+    if looks_like_setlist_manager(server_cwd):
+        return DEFAULT_SETLIST_SERVER_PORT
     return None
+
+
+def looks_like_setlist_manager(server_cwd: Path | None) -> bool:
+    if server_cwd is None:
+        return False
+    return (
+        (server_cwd / "setlist-manager.js").exists()
+        or (server_cwd / "setlist-device.amxd").exists()
+        or server_cwd.name == "setlist_manager"
+    )
 
 
 def start_server(command: str, cwd: Path | None, log_path: Path) -> subprocess.Popen[bytes]:
