@@ -43,16 +43,16 @@ Launch from the repo with the show dashboard:
 That opens Ghostty when it is installed and runs `live_set/live_set_dashboard.py`.
 The dashboard launches the stack, shows server/TouchDesigner/Ableton heartbeats,
 and renders the setlist with the current song highlighted when a current-song
-source is configured. The Python setlist server's status JSON is the primary
-source for both the actual setlist order and the current song:
+source is configured.
 
-```sh
-export LIVE_SET_STATUS_URL=http://127.0.0.1:8000/status
-```
+The wrapper auto-detects `~/setlist_manager` or a sibling `../setlist_manager`
+repo. When that server exposes `GET /status`, the dashboard uses it for server
+health and the actual `sets` order from `setlist.json`. If the server is alive
+but the local `setlist.json` is missing or invalid, the server row shows that
+configuration error directly.
 
-If `LIVE_SET_STATUS_URL` is not set, the dashboard tries common local `/status`
-ports and falls back to explicit overrides only. Use `LIVE_SET_SETLIST_URL` for a
-separate setlist JSON endpoint, `LIVE_SET_SETLIST` for a JSON/TSV file, or
+Use `LIVE_SET_STATUS_URL` to override the status endpoint, `LIVE_SET_SETLIST_URL`
+for a separate setlist JSON endpoint, `LIVE_SET_SETLIST` for a JSON/TSV file, or
 `LIVE_SET_CURRENT_SONG`, `LIVE_SET_CURRENT_SONG_FILE`, and
 `LIVE_SET_CURRENT_SONG_URL` for temporary current-song overrides.
 

@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import socket
 import subprocess
 import sys
 import time
@@ -23,6 +24,7 @@ DEFAULT_SERVER_DIRS = (
     Path.home() / "Documents" / "setlist_manager",
     REPO_ROOT.parent / "setlist_manager",
 )
+DEFAULT_SERVER_HOST = "127.0.0.1"
 
 
 class LaunchError(RuntimeError):
@@ -79,6 +81,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--server-ready-url",
         default=os.environ.get("LIVE_SET_SERVER_READY_URL"),
         help="Optional URL to poll before launching the apps, for example http://127.0.0.1:3000/health.",
+    )
+    parser.add_argument(
+        "--server-host",
+        default=os.environ.get("LIVE_SET_SERVER_HOST", DEFAULT_SERVER_HOST),
+        help="Host used for socket readiness when setlist_manager/setlist.json provides serverPort.",
     )
     parser.add_argument(
         "--server-wait",
@@ -138,7 +145,15 @@ def run(args: argparse.Namespace) -> int:
     try:
         if not args.skip_server:
             server_proc = start_server(server_command, server_cwd, expand_path(args.server_log))
-            wait_for_server(args.server_ready_url, args.server_wait)
+            try:
+                wait_for_server(args.server_ready_url, args.server_wait, server_cwd, args.server_host)
+            except LaunchError:
+                if server_proc.poll() is not None:
+                    raise LaunchError(
+                        f"Server exited early with code {server_proc.returncode}. "
+                        f"Check {expand_path(args.server_log)}.",
+                    )
+                raise
             if server_proc.poll() is not None:
                 raise LaunchError(
                     f"Server exited early with code {server_proc.returncode}. "
@@ -217,6 +232,31 @@ def infer_server_command(server_cwd: Path | None) -> str | None:
     return None
 
 
+def setlist_config_path(server_cwd: Path | None) -> Path | None:
+    if server_cwd is None:
+        return None
+    path = server_cwd / "setlist.json"
+    return path if path.exists() else None
+
+
+def read_setlist_config(server_cwd: Path | None) -> dict[str, object]:
+    path = setlist_config_path(server_cwd)
+    if path is None:
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def infer_server_port(server_cwd: Path | None) -> int | None:
+    port = read_setlist_config(server_cwd).get("serverPort")
+    if isinstance(port, int):
+        return port
+    return None
+
+
 def start_server(command: str, cwd: Path | None, log_path: Path) -> subprocess.Popen[bytes]:
     log_path.parent.mkdir(parents=True, exist_ok=True)
     with log_path.open("ab") as log:
@@ -233,7 +273,12 @@ def start_server(command: str, cwd: Path | None, log_path: Path) -> subprocess.P
         )
 
 
-def wait_for_server(ready_url: str | None, wait_seconds: float) -> None:
+def wait_for_server(
+    ready_url: str | None,
+    wait_seconds: float,
+    server_cwd: Path | None = None,
+    server_host: str = DEFAULT_SERVER_HOST,
+) -> None:
     if ready_url:
         deadline = time.monotonic() + wait_seconds
         last_error: Exception | None = None
@@ -246,8 +291,25 @@ def wait_for_server(ready_url: str | None, wait_seconds: float) -> None:
                 last_error = exc
             time.sleep(0.25)
         raise LaunchError(f"Server did not become ready at {ready_url}: {last_error}")
+    port = infer_server_port(server_cwd)
+    if port is not None:
+        wait_for_socket(server_host, port, wait_seconds)
+        return
     if wait_seconds > 0:
         time.sleep(wait_seconds)
+
+
+def wait_for_socket(host: str, port: int, wait_seconds: float) -> None:
+    deadline = time.monotonic() + wait_seconds
+    last_error: OSError | None = None
+    while time.monotonic() < deadline:
+        try:
+            with socket.create_connection((host, port), timeout=0.5):
+                return
+        except OSError as exc:
+            last_error = exc
+        time.sleep(0.25)
+    raise LaunchError(f"Server did not open {host}:{port}: {last_error}")
 
 
 def open_with_app(app: str, target: Path | None) -> None:

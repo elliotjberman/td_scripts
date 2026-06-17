@@ -28,6 +28,7 @@ DEFAULT_SETLIST_FILES = (
     Path.home() / "setlist_manager" / "setlist.json",
     Path.home() / "setlist_manager" / "current_setlist.json",
     Path.home() / "setlist_manager" / "live_set.json",
+    REPO_ROOT.parent / "setlist_manager" / "setlist.json",
     REPO_ROOT / "live_set" / "setlist.json",
 )
 DEFAULT_STATUS_URLS = (
@@ -110,6 +111,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--server-cwd", default=os.environ.get("LIVE_SET_SERVER_CWD"))
     parser.add_argument("--server-ready-url", default=os.environ.get("LIVE_SET_SERVER_READY_URL"))
     parser.add_argument(
+        "--server-host",
+        default=os.environ.get("LIVE_SET_SERVER_HOST", launch_live_set.DEFAULT_SERVER_HOST),
+    )
+    parser.add_argument(
         "--server-wait",
         type=float,
         default=float(os.environ.get("LIVE_SET_SERVER_WAIT", "4")),
@@ -148,7 +153,7 @@ def launch_stack(args: argparse.Namespace) -> subprocess.Popen[bytes] | None:
             server_cwd,
             launch_live_set.expand_path(args.server_log),
         )
-        launch_live_set.wait_for_server(args.server_ready_url, args.server_wait)
+        launch_live_set.wait_for_server(args.server_ready_url, args.server_wait, server_cwd, args.server_host)
         if server_proc.poll() is not None:
             raise launch_live_set.LaunchError(
                 f"Server exited early with code {server_proc.returncode}. Check {args.server_log}.",
@@ -196,6 +201,10 @@ def server_status(
     if server_proc is not None and server_proc.poll() is not None:
         return status("Server", "fail", f"exited {server_proc.returncode}")
     if server_snapshot.get("data") is not None:
+        data = server_snapshot.get("data")
+        if isinstance(data, dict) and data.get("ok") is False:
+            detail = first_text(data, ("error", "message")) or f"status {server_snapshot.get('url')}"
+            return status("Server", "fail", detail)
         return status("Server", "ok", f"status {server_snapshot.get('url')}")
     if args.server_ready_url:
         ok, detail = check_url(args.server_ready_url)
@@ -278,6 +287,8 @@ def current_setlist(
         rows = read_setlist(fallback)
         if rows:
             return rows, str(fallback)
+    if server_snapshot.get("url"):
+        return [], f"server status {server_snapshot.get('url')}"
     return [], "server status"
 
 
@@ -397,7 +408,7 @@ def setlist_from_status(data: object) -> list[dict[str, str]]:
         return setlist_from_value(data)
     if not isinstance(data, dict):
         return []
-    for key in ("setlist", "live_set", "liveSet", "queue", "songs", "tracks", "items"):
+    for key in ("setlist", "live_set", "liveSet", "sets", "queue", "songs", "tracks", "items"):
         rows = setlist_from_value(data.get(key))
         if rows:
             return rows
@@ -412,7 +423,7 @@ def setlist_from_value(value: object) -> list[dict[str, str]]:
     if value is None:
         return []
     if isinstance(value, dict):
-        for key in ("songs", "tracks", "items", "setlist", "entries"):
+        for key in ("sets", "songs", "tracks", "items", "setlist", "entries"):
             rows = setlist_from_value(value.get(key))
             if rows:
                 return rows
@@ -444,14 +455,14 @@ def setlist_row(item: object, index: int) -> dict[str, str]:
 
     name = first_text(
         merged,
-        ("display_name", "displayName", "title", "name", "song_name", "songName", "label"),
+        ("display_name", "displayName", "title", "name", "song_name", "songName", "label", "path"),
     )
     slug = first_text(merged, ("slug", "song_slug", "songSlug", "key"))
     if not slug:
         slug = name
-    display = name or slug
+    display = display_name_from_value(name or slug)
     row_index = first_text(merged, ("position", "order", "index", "scene", "scene_number", "sceneNumber")) or str(index)
-    return {"index": str(row_index), "slug": parse_song_slug(slug), "name": str(display)}
+    return {"index": str(row_index), "slug": parse_song_slug(display_name_from_value(slug)), "name": str(display)}
 
 
 def current_song_from_status(data: object, setlist: list[dict[str, str]]) -> str:
@@ -474,6 +485,8 @@ def current_song_from_status(data: object, setlist: list[dict[str, str]]) -> str
         "now_playing",
         "nowPlaying",
         "current",
+        "current_path",
+        "currentPath",
     ):
         slug = slug_from_song_value(data.get(key))
         if slug:
@@ -493,9 +506,9 @@ def slug_from_song_value(value: object) -> str:
         return ""
     if isinstance(value, dict):
         return parse_song_slug(
-            first_text(value, ("slug", "song_slug", "songSlug", "key", "name", "song_name", "songName", "title")),
+            first_text(value, ("slug", "song_slug", "songSlug", "key", "name", "song_name", "songName", "title", "path")),
         )
-    return parse_song_slug(value)
+    return parse_song_slug(display_name_from_value(value))
 
 
 def current_index_from_status(data: dict[str, object]) -> int | None:
@@ -539,6 +552,17 @@ def parse_song_slug(value: object) -> str:
 def normalize_song_slug(value: object) -> str:
     text = str(value).strip().lower()
     return "_".join(text.split())
+
+
+def display_name_from_value(value: object) -> str:
+    text = str(value).strip()
+    if not text:
+        return ""
+    path = Path(text.replace("\\", "/"))
+    name = path.name or text
+    if name.endswith(".als"):
+        name = name[:-4]
+    return name
 
 
 def render(
