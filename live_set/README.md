@@ -34,18 +34,27 @@ Use `launch_live_set.py` to bring up the live stack in show order:
 2. open the master TouchDesigner project;
 3. open Ableton.
 
-The launcher is intentionally hardcoded for the live rig:
-
-- server directory: `~/setlist_manager`
-- server command: `python3 server.py`
-- TouchDesigner project: `big_kahuna/master_v2_no_tsv.toe`
-- server log: `~/Library/Logs/td_scripts/live_set_server.log`
-
-Launch from the repo with:
+Launch from the repo with the show dashboard:
 
 ```sh
 ./live_set/start_live_set.command
 ```
+
+That opens Ghostty when it is installed and runs `live_set/live_set_dashboard.py`.
+The dashboard launches the stack, shows server/TouchDesigner/Ableton heartbeats,
+and renders the setlist with the current song highlighted when a current-song
+source is configured. The Python setlist server's status JSON is the primary
+source for both the actual setlist order and the current song:
+
+```sh
+export LIVE_SET_STATUS_URL=http://127.0.0.1:8000/status
+```
+
+If `LIVE_SET_STATUS_URL` is not set, the dashboard tries common local `/status`
+ports and falls back to explicit overrides only. Use `LIVE_SET_SETLIST_URL` for a
+separate setlist JSON endpoint, `LIVE_SET_SETLIST` for a JSON/TSV file, or
+`LIVE_SET_CURRENT_SONG`, `LIVE_SET_CURRENT_SONG_FILE`, and
+`LIVE_SET_CURRENT_SONG_URL` for temporary current-song overrides.
 
 Check paths without starting the rig:
 
@@ -54,5 +63,6 @@ Check paths without starting the rig:
 ```
 
 For Spotlight/double-click launching, install
-`live_set/macos/Start Live Set.app` into `~/Applications`. It opens Terminal and
-runs `~/td_scripts/live_set/start_live_set.command`, so failures stay visible.
+`live_set/macos/Start Live Set.app` into `~/Applications`. It runs
+`~/td_scripts/live_set/start_live_set.command`, which opens Ghostty or falls back
+to Terminal.
