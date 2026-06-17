@@ -50,6 +50,11 @@ LIVE_SET_TERMINAL_APP=Terminal ./live_set/start_live_set.command
 LIVE_SET_TERMINAL_APP=/Applications/Ghostty.app ./live_set/start_live_set.command
 ```
 
+The launch wrapper runs the live set from the real `~/td_scripts` checkout by
+default, even when the script was invoked from a Codex worktree. This keeps
+TouchDesigner project-relative paths aligned with the machine setup. Override
+that runtime checkout with `LIVE_SET_TD_SCRIPTS_ROOT`.
+
 The dashboard launches the stack, shows server/TouchDesigner/Ableton heartbeats,
 and renders the setlist with the current song highlighted when a current-song
 source is configured.

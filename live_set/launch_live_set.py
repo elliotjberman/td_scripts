@@ -16,7 +16,13 @@ import urllib.request
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_TD_PROJECT = REPO_ROOT / "big_kahuna" / "master_v2_no_tsv.toe"
+DEFAULT_TD_SCRIPTS_ROOT = Path(
+    os.environ.get(
+        "LIVE_SET_TD_SCRIPTS_ROOT",
+        str(Path.home() / "td_scripts" if (Path.home() / "td_scripts").exists() else REPO_ROOT),
+    ),
+).expanduser()
+DEFAULT_TD_PROJECT = DEFAULT_TD_SCRIPTS_ROOT / "big_kahuna" / "master_v2_no_tsv.toe"
 DEFAULT_LOG = Path.home() / "Library" / "Logs" / "td_scripts" / "live_set_server.log"
 DEFAULT_SERVER_DIRS = (
     Path.home() / "setlist_manager",
@@ -51,7 +57,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--td-project",
         default=os.environ.get("LIVE_SET_TD_PROJECT", str(DEFAULT_TD_PROJECT)),
-        help="TouchDesigner .toe project to open. Defaults to the repo master project.",
+        help="TouchDesigner .toe project to open. Defaults to ~/td_scripts/big_kahuna/master_v2_no_tsv.toe.",
     )
     parser.add_argument(
         "--touchdesigner-app",

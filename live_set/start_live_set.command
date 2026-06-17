@@ -2,8 +2,13 @@
 set -euo pipefail
 
 script_dir="${0:A:h}"
-repo_root="${script_dir:h}"
-dashboard_command="cd ${(q)repo_root} && exec ./live_set/live_set_dashboard.py --launch-stack"
+source_repo_root="${script_dir:h}"
+runtime_repo_root="${LIVE_SET_TD_SCRIPTS_ROOT:-$HOME/td_scripts}"
+if [[ ! -d "$runtime_repo_root" ]]; then
+  runtime_repo_root="$source_repo_root"
+fi
+dashboard_script="$source_repo_root/live_set/live_set_dashboard.py"
+dashboard_command="cd ${(q)runtime_repo_root} && exec ${(q)dashboard_script} --launch-stack"
 terminal_app="${LIVE_SET_TERMINAL_APP:-auto}"
 
 resolve_app() {
@@ -37,7 +42,7 @@ open_terminal_app() {
   /usr/bin/osascript <<APPLESCRIPT
 tell application "Terminal"
   activate
-  do script "cd " & quoted form of "$repo_root" & " && ./live_set/live_set_dashboard.py --launch-stack"
+  do script "cd " & quoted form of "$runtime_repo_root" & " && exec " & quoted form of "$dashboard_script" & " --launch-stack"
 end tell
 APPLESCRIPT
 }
