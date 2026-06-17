@@ -441,10 +441,10 @@ def setlist_from_value(value: object) -> list[dict[str, str]]:
 def setlist_row(item: object, index: int) -> dict[str, str]:
     if isinstance(item, str):
         slug = parse_song_slug(item)
-        return {"index": str(index), "slug": slug, "name": item}
+        return {"index": str(index), "slug": slug, "name": item, "interlude": ""}
     if not isinstance(item, dict):
         text = str(item)
-        return {"index": str(index), "slug": parse_song_slug(text), "name": text}
+        return {"index": str(index), "slug": parse_song_slug(text), "name": text, "interlude": ""}
 
     song = item.get("song")
     merged = dict(item)
@@ -462,7 +462,26 @@ def setlist_row(item: object, index: int) -> dict[str, str]:
         slug = name
     display = display_name_from_value(name or slug)
     row_index = first_text(merged, ("position", "order", "index", "scene", "scene_number", "sceneNumber")) or str(index)
-    return {"index": str(row_index), "slug": parse_song_slug(display_name_from_value(slug)), "name": str(display)}
+    interlude = first_text(
+        merged,
+        (
+            "interlude",
+            "interlude_name",
+            "interludeName",
+            "between",
+            "between_song",
+            "betweenSong",
+            "transition",
+            "transition_name",
+            "transitionName",
+        ),
+    )
+    return {
+        "index": str(row_index),
+        "slug": parse_song_slug(display_name_from_value(slug)),
+        "name": str(display),
+        "interlude": interlude,
+    }
 
 
 def current_song_from_status(data: object, setlist: list[dict[str, str]]) -> str:
@@ -616,7 +635,7 @@ def print_setlist_table(
             row_color = Color.DIM
         elif current_index is not None:
             state = "next"
-        values = (marker, song["index"], song["name"], state)
+        values = (marker, song["index"], song["name"], song.get("interlude", ""), state)
         rows.append(tuple(colorize(value, row_color, no_color) for value in values))
 
     if not rows:
@@ -629,7 +648,7 @@ def print_setlist_table(
         print(colorize(f"Current song {current_slug!r} is not in the setlist.", Color.YELLOW, no_color))
     else:
         print(colorize(f"Current song: {current_slug}", Color.GREEN, no_color))
-    print_table(("", "#", "Song", "State"), rows)
+    print_table(("", "#", "Song", "Interlude", "State"), rows)
 
 
 def current_setlist_index(setlist: list[dict[str, str]], current_slug: str) -> int | None:
