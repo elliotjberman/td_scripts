@@ -65,7 +65,7 @@ class AbletonMidiSourceExt:
 		data = self.MappingData()
 		key = str(note)
 		data.setdefault("mappings", {}).setdefault(key, [])
-		entry = {"target": target_path, "action": action}
+		entry = {"target": self._portable_target_path(target_path), "action": action}
 		if entry not in data["mappings"][key]:
 			data["mappings"][key].append(entry)
 		self.SaveMappingData(data)
@@ -73,6 +73,7 @@ class AbletonMidiSourceExt:
 	def RemoveMapping(self, note, target_path):
 		data = self.MappingData()
 		key = str(note)
+		target_path = self._portable_target_path(target_path)
 		rows = data.setdefault("mappings", {}).get(key, [])
 		data["mappings"][key] = [row for row in rows if row.get("target") != target_path]
 		self.SaveMappingData(data)
@@ -106,7 +107,7 @@ class AbletonMidiSourceExt:
 			if candidate == self.ownerComp or not candidate.isCOMP:
 				continue
 			if self._is_route_target(candidate):
-				targets.append({"label": self._target_label(candidate), "path": candidate.path})
+				targets.append({"label": self._target_label(candidate), "path": self._relative_path(candidate)})
 		return targets
 
 	def SourceId(self):
@@ -119,7 +120,7 @@ class AbletonMidiSourceExt:
 		manager = self._manager()
 		if manager is None:
 			raise RuntimeError("AbletonHookupManager could not be created")
-		return manager.ext.AbletonHookupManagerExt.OpenMappingEditor(self.ownerComp.path)
+		return manager.ext.AbletonHookupManagerExt.OpenMappingEditor(self._relative_from(manager, self.ownerComp))
 
 	def HandleParPulse(self, par):
 		if getattr(par, "name", "") == "Openmapper":
@@ -192,8 +193,8 @@ class AbletonMidiSourceExt:
 		if callbacks is None:
 			callbacks = self.ownerComp.create(td.parameterexecuteDAT, "source_par_callbacks")
 		callbacks.par.pars = "Openmapper"
-		callbacks.par.fromop = self.ownerComp.path
-		callbacks.par.op = self.ownerComp.path
+		callbacks.par.fromop = callbacks.relativePath(self.ownerComp)
+		callbacks.par.op = callbacks.relativePath(self.ownerComp)
 		callbacks.par.onpulse = True
 		callbacks.par.custom = True
 		callbacks.par.builtin = False
@@ -300,6 +301,43 @@ class AbletonMidiSourceExt:
 			return self.ownerComp.evalExpression("op({!r})".format(path))
 		except Exception:
 			return None
+
+	def _portable_target_path(self, target_path):
+		target = target_path if hasattr(target_path, "path") else self._op(target_path)
+		if target is None:
+			return str(target_path or "")
+		return self._relative_path(target)
+
+	def _relative_path(self, target):
+		return self._relative_from(self.ownerComp, target)
+
+	def _relative_from(self, origin, target):
+		try:
+			candidate = origin.relativePath(target)
+			if self._resolves_from(origin, candidate, target):
+				return candidate
+		except Exception:
+			pass
+		return self._manual_relative_path(origin, target)
+
+	def _resolves_from(self, origin, path, target):
+		try:
+			found = origin.op(str(path))
+			return found is not None and found.path == target.path
+		except Exception:
+			return False
+
+	def _manual_relative_path(self, origin, target):
+		try:
+			origin_parts = origin.path.strip("/").split("/")
+			target_parts = target.path.strip("/").split("/")
+		except Exception:
+			return target.path
+		i = 0
+		while i < len(origin_parts) and i < len(target_parts) and origin_parts[i] == target_parts[i]:
+			i += 1
+		parts = [".."] * (len(origin_parts) - i) + target_parts[i:]
+		return "/".join(parts) if parts else "."
 
 	def _manager(self):
 		root = self.ownerComp.parent()
