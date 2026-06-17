@@ -635,8 +635,12 @@ def print_setlist_table(
             row_color = Color.DIM
         elif current_index is not None:
             state = "next"
-        values = (marker, song["index"], song["name"], song.get("interlude", ""), state)
+        values = (marker, song["index"], song["name"], state)
         rows.append(tuple(colorize(value, row_color, no_color) for value in values))
+        interlude = song.get("interlude", "")
+        if interlude:
+            interlude_values = ("", "", f"  interlude: {interlude}", "")
+            rows.append(tuple(colorize(value, Color.DIM, no_color) for value in interlude_values))
 
     if not rows:
         print(colorize(f"No actual setlist rows found from {setlist_source}.", Color.YELLOW, no_color))
@@ -648,7 +652,7 @@ def print_setlist_table(
         print(colorize(f"Current song {current_slug!r} is not in the setlist.", Color.YELLOW, no_color))
     else:
         print(colorize(f"Current song: {current_slug}", Color.GREEN, no_color))
-    print_table(("", "#", "Song", "Interlude", "State"), rows)
+    print_table(("", "#", "Song", "State"), rows)
 
 
 def current_setlist_index(setlist: list[dict[str, str]], current_slug: str) -> int | None:
