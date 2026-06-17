@@ -148,16 +148,17 @@ def launch_stack(args: argparse.Namespace) -> subprocess.Popen[bytes] | None:
             raise launch_live_set.LaunchError(
                 "No server command configured. Pass --server-command or set LIVE_SET_SERVER_COMMAND.",
             )
-        server_proc = launch_live_set.start_server(
-            server_command,
-            server_cwd,
-            launch_live_set.expand_path(args.server_log),
-        )
-        launch_live_set.wait_for_server(args.server_ready_url, args.server_wait, server_cwd, args.server_host)
-        if server_proc.poll() is not None:
-            raise launch_live_set.LaunchError(
-                f"Server exited early with code {server_proc.returncode}. Check {args.server_log}.",
+        if not launch_live_set.server_is_ready(args.server_ready_url, server_cwd, args.server_host):
+            server_proc = launch_live_set.start_server(
+                server_command,
+                server_cwd,
+                launch_live_set.expand_path(args.server_log),
             )
+            launch_live_set.wait_for_server(args.server_ready_url, args.server_wait, server_cwd, args.server_host)
+            if server_proc.poll() is not None:
+                raise launch_live_set.LaunchError(
+                    f"Server exited early with code {server_proc.returncode}. Check {args.server_log}.",
+                )
 
     if not args.skip_touchdesigner:
         td_app = args.touchdesigner_app or launch_live_set.detect_touchdesigner_app()

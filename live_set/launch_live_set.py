@@ -151,21 +151,24 @@ def run(args: argparse.Namespace) -> int:
     server_proc: subprocess.Popen[bytes] | None = None
     try:
         if not args.skip_server:
-            server_proc = start_server(server_command, server_cwd, expand_path(args.server_log))
-            try:
-                wait_for_server(args.server_ready_url, args.server_wait, server_cwd, args.server_host)
-            except LaunchError:
+            if server_is_ready(args.server_ready_url, server_cwd, args.server_host):
+                print("Server already ready.")
+            else:
+                server_proc = start_server(server_command, server_cwd, expand_path(args.server_log))
+                try:
+                    wait_for_server(args.server_ready_url, args.server_wait, server_cwd, args.server_host)
+                except LaunchError:
+                    if server_proc.poll() is not None:
+                        raise LaunchError(
+                            f"Server exited early with code {server_proc.returncode}. "
+                            f"Check {expand_path(args.server_log)}.",
+                        )
+                    raise
                 if server_proc.poll() is not None:
                     raise LaunchError(
                         f"Server exited early with code {server_proc.returncode}. "
                         f"Check {expand_path(args.server_log)}.",
                     )
-                raise
-            if server_proc.poll() is not None:
-                raise LaunchError(
-                    f"Server exited early with code {server_proc.returncode}. "
-                    f"Check {expand_path(args.server_log)}.",
-                )
         if not args.skip_touchdesigner:
             open_with_app(td_app, td_project)
         if not args.skip_ableton:
@@ -329,6 +332,27 @@ def wait_for_socket(host: str, port: int, wait_seconds: float) -> None:
             last_error = exc
         time.sleep(0.25)
     raise LaunchError(f"Server did not open {host}:{port}: {last_error}")
+
+
+def server_is_ready(ready_url: str | None, server_cwd: Path | None = None, server_host: str = DEFAULT_SERVER_HOST) -> bool:
+    if ready_url:
+        try:
+            with urllib.request.urlopen(ready_url, timeout=0.8) as response:
+                return 200 <= response.status < 400
+        except (urllib.error.URLError, TimeoutError):
+            return False
+    port = infer_server_port(server_cwd)
+    if port is None:
+        return False
+    return socket_is_open(server_host, port)
+
+
+def socket_is_open(host: str, port: int) -> bool:
+    try:
+        with socket.create_connection((host, port), timeout=0.5):
+            return True
+    except OSError:
+        return False
 
 
 def open_with_app(app: str, target: Path | None) -> None:
