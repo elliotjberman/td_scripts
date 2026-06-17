@@ -30,7 +30,7 @@ def open_mapping_editor(manager, source=None):
 	if source is None:
 		return None
 	panel = ensure_mapping_editor(manager)
-	panel.store("source_path", source.path)
+	panel.store("source_path", _relative_from(manager.ownerComp, source))
 	panel.store("selected_note", panel.fetch("selected_note", "*") or "*")
 	panel.store("targets_dirty", True)
 	refresh_mapping_editor(manager)
@@ -62,7 +62,7 @@ def select_note(manager, note_key):
 
 def toggle_target(manager, target_path):
 	panel = ensure_mapping_editor(manager)
-	source = _op(manager, panel.fetch("source_path", ""))
+	source = _current_source(manager)
 	target_path = str(target_path or "")
 	if source is None or not target_path:
 		return False
@@ -78,7 +78,8 @@ def toggle_target(manager, target_path):
 
 
 def go_to_target(manager, target_path):
-	target = _op(manager, target_path)
+	source = _current_source(manager)
+	target = _op_from(source, target_path) or _op(manager, target_path)
 	if target is None:
 		return False
 	try:
@@ -102,7 +103,7 @@ def refresh_mapping_editor(manager):
 	panel = manager.ownerComp.op("mapping_editor_panel")
 	if panel is None:
 		return
-	source = _op(manager, panel.fetch("source_path", ""))
+	source = _current_source(manager)
 	if source is None:
 		return
 	note_rows = panel.op("mapping_note_rows")
@@ -221,6 +222,13 @@ def _resolve_source(manager, source):
 	return sources[0] if sources else None
 
 
+def _current_source(manager):
+	panel = manager.ownerComp.op("mapping_editor_panel")
+	if panel is None:
+		return None
+	return _op(manager, panel.fetch("source_path", ""))
+
+
 def _is_source(operator):
 	try:
 		return "ableton-midi-source-v2" in operator.tags or operator.op("abletonMIDI") is not None
@@ -229,10 +237,54 @@ def _is_source(operator):
 
 
 def _op(manager, path):
+	return _op_from(manager.ownerComp, path) or _op_from(None, path)
+
+
+def _op_from(origin, path):
+	if not path:
+		return None
 	try:
-		return manager._td_environment()["op"](str(path))
+		if origin is not None:
+			found = origin.op(str(path))
+			if found is not None:
+				return found
+	except Exception:
+		pass
+	try:
+		return op(str(path))
 	except Exception:
 		return None
+
+
+def _relative_from(origin, target):
+	try:
+		candidate = origin.relativePath(target)
+		if _resolves_from(origin, candidate, target):
+			return candidate
+	except Exception:
+		pass
+	return _manual_relative_path(origin, target)
+
+
+def _resolves_from(origin, path, target):
+	try:
+		found = origin.op(str(path))
+		return found is not None and found.path == target.path
+	except Exception:
+		return False
+
+
+def _manual_relative_path(origin, target):
+	try:
+		origin_parts = origin.path.strip("/").split("/")
+		target_parts = target.path.strip("/").split("/")
+	except Exception:
+		return target.path
+	i = 0
+	while i < len(origin_parts) and i < len(target_parts) and origin_parts[i] == target_parts[i]:
+		i += 1
+	parts = [".."] * (len(origin_parts) - i) + target_parts[i:]
+	return "/".join(parts) if parts else "."
 
 
 def _is_int(value):
@@ -257,7 +309,7 @@ def _panel(manager):
 	panel = manager.ownerComp.op("mapping_editor_panel")
 	if panel is None:
 		panel = manager.ownerComp.create(td.containerCOMP, "mapping_editor_panel")
-	panel.store("manager_path", manager.ownerComp.path)
+	panel.store("manager_path", ".")
 	panel.par.w = WIDTH
 	panel.par.h = HEIGHT
 	return panel
@@ -295,7 +347,7 @@ def _list(panel, name, rows_name, x, width, cols, callbacks_text):
 		callbacks = panel.create(td.textDAT, name + "_callbacks")
 	callbacks.par.language = "python"
 	callbacks.text = callbacks_text
-	list_comp.par.callbacks = callbacks.path
+	list_comp.par.callbacks = _relative_from(list_comp, callbacks)
 	list_comp.store("rows_name", rows_name)
 	return list_comp
 
@@ -309,7 +361,7 @@ def _updater(panel):
 	execute.par.language = "python"
 	execute.text = (
 		"def onFrameStart(frame):\n"
-		"\tmanager = op(parent().fetch('manager_path', ''))\n"
+		"\tmanager = parent().parent()\n"
 		"\twindow = manager.op('mapping_editor_window') if manager else None\n"
 		"\tif window is not None and not window.isOpen:\n"
 		"\t\tme.par.active = False\n"
@@ -325,7 +377,7 @@ def _window(manager, panel):
 	window = manager.ownerComp.op("mapping_editor_window")
 	if window is None:
 		window = manager.ownerComp.create(td.windowCOMP, "mapping_editor_window")
-	_set(window, "winop", panel.path)
+	_set(window, "winop", _relative_from(window, panel))
 	_set(window, "title", "MIDI Note Mapping")
 	_set(window, "size", "custom")
 	_set(window, "winw", WIDTH)
@@ -405,7 +457,7 @@ def onSelect(comp, startRow, startCol, startCoords, endRow, endCol, endCoords, s
 	dat = parent().op(comp.fetch('rows_name', ''))
 	if not dat or endRow >= dat.numRows:
 		return
-	manager = op(parent().fetch('manager_path', ''))
+	manager = parent().parent()
 	if manager:
 		manager.ext.AbletonHookupManagerExt.SelectMappingNote(dat[endRow, 3].val)
 	return
@@ -466,7 +518,7 @@ def onSelect(comp, startRow, startCol, startCoords, endRow, endCol, endCoords, s
 	target_path = dat[endRow, 3].val if dat[endRow, 3] is not None else ''
 	if not target_path:
 		return
-	manager = op(parent().fetch('manager_path', ''))
+	manager = parent().parent()
 	if manager:
 		if endCol == 2:
 			manager.ext.AbletonHookupManagerExt.GoToMappingTarget(target_path)

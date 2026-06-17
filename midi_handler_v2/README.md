@@ -22,6 +22,15 @@ This creates or updates `AbletonHookupManager` in the current component. The man
 
 Mappings are stored on each source wrapper in `mappings_json`. Runtime routing should read that local mapping data instead of relying on external TSV files.
 
+## Portable Path Contract
+
+Visuals may be renamed or copied under a different parent, so MIDI v2 runtime paths must not assume `/project1`, `visuals_container`, or a component named `visual`.
+
+- `source_callback` lives directly inside the MIDI source wrapper.
+- `abletonMIDI.Callbackdat` should use `parent().op('source_callback').path`, so TDAbleton receives an absolute callback DAT path computed from the current wrapper location.
+- Mapping targets in `mappings_json` are resolved from the source wrapper. A sibling envelope should be stored as `../BumpEnvelope`, not `BumpEnvelope` and not `/project1/...`.
+- The runtime should not recursively search for mapping targets. If a stored relative path no longer resolves from the source wrapper, repair the mapping during setup/authoring.
+
 ## Direct Manager Calls
 
 These are the agent-friendly entrypoints exposed by `AbletonHookupManagerExt`:

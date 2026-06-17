@@ -103,8 +103,6 @@ def _configure_ableton_midi(wrapper, ableton_midi, track_name, home):
 	for op_ in (wrapper, ableton_midi):
 		op_.store("source_id", source_id)
 		op_.store("track_name", track_name)
-		op_.store("source_wrapper_path", wrapper.path)
-		op_.store("ableton_midi_operator_path", ableton_midi.path)
 		op_.store("home", home)
 	wrapper.store("midi_v2_allow_autoconnect", False)
 
@@ -124,7 +122,7 @@ def _configure_ableton_midi(wrapper, ableton_midi, track_name, home):
 		require_device=False,
 	)
 	wrapper.store("safe_bind_result", result)
-	_set_parameter_value(ableton_midi, "Callbackdat", callback)
+	_set_parameter_expr(ableton_midi, "Callbackdat", "parent().op('source_callback').path")
 	_set_parameter_value(ableton_midi, "Enablecallbacks", True)
 	_remove_unused_callback_dats(wrapper, callback)
 
@@ -375,6 +373,14 @@ def _set_parameter_value(operator, name, value):
 	if par is None:
 		return False
 	par.val = value
+	return True
+
+
+def _set_parameter_expr(operator, name, expression):
+	par = operator.par[name]
+	if par is None:
+		return False
+	par.expr = expression
 	return True
 
 
