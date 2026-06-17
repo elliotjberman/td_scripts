@@ -40,7 +40,16 @@ Launch from the repo with the show dashboard:
 ./live_set/start_live_set.command
 ```
 
-That opens Ghostty when it is installed and runs `live_set/live_set_dashboard.py`.
+That opens the dashboard in your preferred terminal and runs
+`live_set/live_set_dashboard.py`. The default terminal preference is `auto`,
+which uses Ghostty when installed, then WezTerm when installed, and falls back to
+macOS Terminal. Override it with `LIVE_SET_TERMINAL_APP`:
+
+```sh
+LIVE_SET_TERMINAL_APP=Terminal ./live_set/start_live_set.command
+LIVE_SET_TERMINAL_APP=/Applications/Ghostty.app ./live_set/start_live_set.command
+```
+
 The dashboard launches the stack, shows server/TouchDesigner/Ableton heartbeats,
 and renders the setlist with the current song highlighted when a current-song
 source is configured.
