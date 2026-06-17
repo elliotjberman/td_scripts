@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import socket
 import subprocess
 import sys
 import time
@@ -15,7 +16,13 @@ import urllib.request
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_TD_PROJECT = REPO_ROOT / "big_kahuna" / "master_v2_no_tsv.toe"
+DEFAULT_TD_SCRIPTS_ROOT = Path(
+    os.environ.get(
+        "LIVE_SET_TD_SCRIPTS_ROOT",
+        str(Path.home() / "td_scripts" if (Path.home() / "td_scripts").exists() else REPO_ROOT),
+    ),
+).expanduser()
+DEFAULT_TD_PROJECT = DEFAULT_TD_SCRIPTS_ROOT / "big_kahuna" / "master_v2_no_tsv.toe"
 DEFAULT_LOG = Path.home() / "Library" / "Logs" / "td_scripts" / "live_set_server.log"
 DEFAULT_SERVER_DIRS = (
     Path.home() / "setlist_manager",
@@ -23,6 +30,8 @@ DEFAULT_SERVER_DIRS = (
     Path.home() / "Documents" / "setlist_manager",
     REPO_ROOT.parent / "setlist_manager",
 )
+DEFAULT_SERVER_HOST = "127.0.0.1"
+DEFAULT_SETLIST_SERVER_PORT = 8000
 
 
 class LaunchError(RuntimeError):
@@ -48,7 +57,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--td-project",
         default=os.environ.get("LIVE_SET_TD_PROJECT", str(DEFAULT_TD_PROJECT)),
-        help="TouchDesigner .toe project to open. Defaults to the repo master project.",
+        help="TouchDesigner .toe project to open. Defaults to ~/td_scripts/big_kahuna/master_v2_no_tsv.toe.",
     )
     parser.add_argument(
         "--touchdesigner-app",
@@ -79,6 +88,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--server-ready-url",
         default=os.environ.get("LIVE_SET_SERVER_READY_URL"),
         help="Optional URL to poll before launching the apps, for example http://127.0.0.1:3000/health.",
+    )
+    parser.add_argument(
+        "--server-host",
+        default=os.environ.get("LIVE_SET_SERVER_HOST", DEFAULT_SERVER_HOST),
+        help="Host used for socket readiness when setlist_manager/setlist.json provides serverPort.",
     )
     parser.add_argument(
         "--server-wait",
@@ -137,13 +151,24 @@ def run(args: argparse.Namespace) -> int:
     server_proc: subprocess.Popen[bytes] | None = None
     try:
         if not args.skip_server:
-            server_proc = start_server(server_command, server_cwd, expand_path(args.server_log))
-            wait_for_server(args.server_ready_url, args.server_wait)
-            if server_proc.poll() is not None:
-                raise LaunchError(
-                    f"Server exited early with code {server_proc.returncode}. "
-                    f"Check {expand_path(args.server_log)}.",
-                )
+            if server_is_ready(args.server_ready_url, server_cwd, args.server_host):
+                print("Server already ready.")
+            else:
+                server_proc = start_server(server_command, server_cwd, expand_path(args.server_log))
+                try:
+                    wait_for_server(args.server_ready_url, args.server_wait, server_cwd, args.server_host)
+                except LaunchError:
+                    if server_proc.poll() is not None:
+                        raise LaunchError(
+                            f"Server exited early with code {server_proc.returncode}. "
+                            f"Check {expand_path(args.server_log)}.",
+                        )
+                    raise
+                if server_proc.poll() is not None:
+                    raise LaunchError(
+                        f"Server exited early with code {server_proc.returncode}. "
+                        f"Check {expand_path(args.server_log)}.",
+                    )
         if not args.skip_touchdesigner:
             open_with_app(td_app, td_project)
         if not args.skip_ableton:
@@ -217,6 +242,43 @@ def infer_server_command(server_cwd: Path | None) -> str | None:
     return None
 
 
+def setlist_config_path(server_cwd: Path | None) -> Path | None:
+    if server_cwd is None:
+        return None
+    path = server_cwd / "setlist.json"
+    return path if path.exists() else None
+
+
+def read_setlist_config(server_cwd: Path | None) -> dict[str, object]:
+    path = setlist_config_path(server_cwd)
+    if path is None:
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def infer_server_port(server_cwd: Path | None) -> int | None:
+    port = read_setlist_config(server_cwd).get("serverPort")
+    if isinstance(port, int):
+        return port
+    if looks_like_setlist_manager(server_cwd):
+        return DEFAULT_SETLIST_SERVER_PORT
+    return None
+
+
+def looks_like_setlist_manager(server_cwd: Path | None) -> bool:
+    if server_cwd is None:
+        return False
+    return (
+        (server_cwd / "setlist-manager.js").exists()
+        or (server_cwd / "setlist-device.amxd").exists()
+        or server_cwd.name == "setlist_manager"
+    )
+
+
 def start_server(command: str, cwd: Path | None, log_path: Path) -> subprocess.Popen[bytes]:
     log_path.parent.mkdir(parents=True, exist_ok=True)
     with log_path.open("ab") as log:
@@ -233,7 +295,12 @@ def start_server(command: str, cwd: Path | None, log_path: Path) -> subprocess.P
         )
 
 
-def wait_for_server(ready_url: str | None, wait_seconds: float) -> None:
+def wait_for_server(
+    ready_url: str | None,
+    wait_seconds: float,
+    server_cwd: Path | None = None,
+    server_host: str = DEFAULT_SERVER_HOST,
+) -> None:
     if ready_url:
         deadline = time.monotonic() + wait_seconds
         last_error: Exception | None = None
@@ -246,8 +313,46 @@ def wait_for_server(ready_url: str | None, wait_seconds: float) -> None:
                 last_error = exc
             time.sleep(0.25)
         raise LaunchError(f"Server did not become ready at {ready_url}: {last_error}")
+    port = infer_server_port(server_cwd)
+    if port is not None:
+        wait_for_socket(server_host, port, wait_seconds)
+        return
     if wait_seconds > 0:
         time.sleep(wait_seconds)
+
+
+def wait_for_socket(host: str, port: int, wait_seconds: float) -> None:
+    deadline = time.monotonic() + wait_seconds
+    last_error: OSError | None = None
+    while time.monotonic() < deadline:
+        try:
+            with socket.create_connection((host, port), timeout=0.5):
+                return
+        except OSError as exc:
+            last_error = exc
+        time.sleep(0.25)
+    raise LaunchError(f"Server did not open {host}:{port}: {last_error}")
+
+
+def server_is_ready(ready_url: str | None, server_cwd: Path | None = None, server_host: str = DEFAULT_SERVER_HOST) -> bool:
+    if ready_url:
+        try:
+            with urllib.request.urlopen(ready_url, timeout=0.8) as response:
+                return 200 <= response.status < 400
+        except (urllib.error.URLError, TimeoutError):
+            return False
+    port = infer_server_port(server_cwd)
+    if port is None:
+        return False
+    return socket_is_open(server_host, port)
+
+
+def socket_is_open(host: str, port: int) -> bool:
+    try:
+        with socket.create_connection((host, port), timeout=0.5):
+            return True
+    except OSError:
+        return False
 
 
 def open_with_app(app: str, target: Path | None) -> None:

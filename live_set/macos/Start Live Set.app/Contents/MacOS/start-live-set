@@ -1,0 +1,12 @@
+#!/bin/zsh
+set -euo pipefail
+
+repo_root="$HOME/td_scripts"
+command_path="$repo_root/live_set/start_live_set.command"
+
+if [[ ! -x "$command_path" ]]; then
+  /usr/bin/osascript -e 'display dialog "Could not find executable ~/td_scripts/live_set/start_live_set.command. Pull or copy the latest td_scripts repo changes, then try again." buttons {"OK"} default button "OK" with title "Start Live Set"'
+  exit 1
+fi
+
+/bin/zsh "$command_path"
