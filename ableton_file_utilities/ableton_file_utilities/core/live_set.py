@@ -16,6 +16,10 @@ from typing import Iterable
 XML_TAG_RE = re.compile(r"<(/?)([A-Za-z_][\w:.-]*)([^<>]*?)(/?)>")
 TAG_VALUE_TEMPLATE = r"<{tag}\b[^>]*\bValue=\"([^\"]*)\""
 HEX_STATE_RE = re.compile(r"(<ProcessorState>\s*)([0-9A-Fa-f\s]+?)(\s*</ProcessorState>)", re.I | re.S)
+GLOBAL_ID_RE = re.compile(r'(<(?:Pointee|AutomationTarget|ModulationTarget)\b[^>]*\bId=")(\d+)(")')
+DEVICE_ON_BLOCK_RE = re.compile(r"<On>\s*.*?</On>", re.S)
+DEVICE_ON_MANUAL_RE = re.compile(r'(<On>\s*.*?<Manual\b[^>]*\bValue=")([^"]*)(")', re.S)
+AUTOMATION_TARGET_ID_RE = re.compile(r'(<AutomationTarget\b[^>]*\bId=")(\d+)(")')
 
 
 @dataclasses.dataclass(frozen=True)
@@ -217,6 +221,30 @@ def format_hex_like_existing(existing: str, data: bytes, width: int = 80) -> str
     return chunks[0] + "".join(f"{newline}{indent}{chunk}" for chunk in chunks[1:])
 
 
+def copy_device_on_state(source_block: str, target_block: str) -> str:
+    source_match = DEVICE_ON_MANUAL_RE.search(source_block)
+    if source_match:
+        target_block = DEVICE_ON_MANUAL_RE.sub(
+            lambda match: f"{match.group(1)}{source_match.group(2)}{match.group(3)}",
+            target_block,
+            count=1,
+        )
+
+    source_on = DEVICE_ON_BLOCK_RE.search(source_block)
+    source_target = AUTOMATION_TARGET_ID_RE.search(source_on.group(0)) if source_on else None
+    if not source_target:
+        return target_block
+
+    def replace_on_target(match: re.Match[str]) -> str:
+        return AUTOMATION_TARGET_ID_RE.sub(
+            lambda target: f"{target.group(1)}{source_target.group(2)}{target.group(3)}",
+            match.group(0),
+            count=1,
+        )
+
+    return DEVICE_ON_BLOCK_RE.sub(replace_on_target, target_block, count=1)
+
+
 def remap_cloned_plugin_device(block: str, plugin_device_id: int, first_global_id: int) -> tuple[str, int]:
     next_id = first_global_id
     block = re.sub(r'(<PluginDevice\b[^>]*\bId=")(\d+)(")', rf"\g<1>{plugin_device_id}\3", block, count=1)
@@ -233,5 +261,4 @@ def remap_cloned_plugin_device(block: str, plugin_device_id: int, first_global_i
             next_id += 1
         return f'{match.group(1)}{id_map[old_id]}{match.group(3)}'
 
-    pattern = re.compile(r'(<(?:Pointee|AutomationTarget|ModulationTarget)\b[^>]*\bId=")(\d+)(")')
-    return pattern.sub(replace_global_id, block), next_id
+    return GLOBAL_ID_RE.sub(replace_global_id, block), next_id

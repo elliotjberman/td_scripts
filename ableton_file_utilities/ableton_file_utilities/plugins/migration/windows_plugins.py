@@ -22,9 +22,6 @@ from ableton_file_utilities.core import live_set
 WINDOWS_PATH_RE = re.compile(r"^[A-Za-z]:[\\/]")
 PLUGIN_FLOAT_RE = re.compile(r"<PluginFloatParameter\b[^>]*>(.*?)</PluginFloatParameter>", re.S)
 MANUAL_VALUE_RE = re.compile(r'(<Manual\b[^>]*\bValue=")([^"]*)(")')
-DEVICE_ON_MANUAL_RE = re.compile(r'(<On>\s*.*?<Manual\b[^>]*\bValue=")([^"]*)(")', re.S)
-DEVICE_ON_BLOCK_RE = re.compile(r"<On>\s*.*?</On>", re.S)
-AUTOMATION_TARGET_ID_RE = re.compile(r'(<AutomationTarget\b[^>]*\bId=")(\d+)(")')
 BUFFER_RE = re.compile(r"<Buffer>\s*(.*?)\s*</Buffer>", re.S)
 UID_BLOCK_RE = re.compile(r"<Uid>\s*(.*?)\s*</Uid>", re.S)
 FIELD_RE = re.compile(r'(<Fields\.([0-3])\b[^>]*\bValue=")(-?\d+)(")')
@@ -279,7 +276,7 @@ def clone_template_block(
             ),
         )
     cloned, next_id = live_set.remap_cloned_plugin_device(template.block, plugin_id, next_id)
-    cloned = copy_device_on_state(source.block, cloned)
+    cloned = live_set.copy_device_on_state(source.block, cloned)
     mapped = map_parameter_values(source.block, cloned)
     mapped_block = mapped.block
     if template.device.format == "VST3" and _plugin_key(source.plugin_name) == "ott":
@@ -642,30 +639,6 @@ def map_parameter_values(source_block: str, target_block: str) -> ParameterMapRe
 
     pieces.append(target_block[cursor:])
     return ParameterMapResult("".join(pieces), mappings, skipped)
-
-
-def copy_device_on_state(source_block: str, target_block: str) -> str:
-    source_match = DEVICE_ON_MANUAL_RE.search(source_block)
-    if source_match:
-        target_block = DEVICE_ON_MANUAL_RE.sub(
-            lambda match: f"{match.group(1)}{source_match.group(2)}{match.group(3)}",
-            target_block,
-            count=1,
-        )
-
-    source_on = DEVICE_ON_BLOCK_RE.search(source_block)
-    source_target = AUTOMATION_TARGET_ID_RE.search(source_on.group(0)) if source_on else None
-    if not source_target:
-        return target_block
-
-    def replace_on_target(match: re.Match[str]) -> str:
-        return AUTOMATION_TARGET_ID_RE.sub(
-            lambda target: f"{target.group(1)}{source_target.group(2)}{target.group(3)}",
-            match.group(0),
-            count=1,
-        )
-
-    return DEVICE_ON_BLOCK_RE.sub(replace_on_target, target_block, count=1)
 
 
 def map_ott_vst3_processor_state(source_block: str, target_block: str) -> str:
