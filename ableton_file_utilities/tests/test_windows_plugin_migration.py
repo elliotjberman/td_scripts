@@ -157,6 +157,9 @@ def permut8_vst2_block() -> str:
 <PluginDevice Id="3">
   <On>
     <Manual Value="false" />
+    <AutomationTarget Id="77">
+      <LockEnvelope Value="0" />
+    </AutomationTarget>
   </On>
   <SourceContext>
     <Value>
@@ -196,6 +199,9 @@ def permut8_vst3_template_block() -> str:
 <PluginDevice Id="101">
   <On>
     <Manual Value="true" />
+    <AutomationTarget Id="88">
+      <LockEnvelope Value="0" />
+    </AutomationTarget>
   </On>
   <SourceContext>
     <Value>
@@ -535,6 +541,8 @@ class WindowsPluginMigrationTests(unittest.TestCase):
         self.assertEqual(state[170:], bytes.fromhex("1D6A59F3FD0A0000789C"))
         on_value = re.search(r"<On>\s*.*?<Manual Value=\"([^\"]+)\"", xml, re.S).group(1)
         self.assertEqual(on_value, "false")
+        on_target = re.search(r"<On>\s*.*?<AutomationTarget Id=\"([^\"]+)\"", xml, re.S).group(1)
+        self.assertEqual(on_target, "77")
 
     def test_sieq_vst3_template_clone_transplants_soundtoys_preset_buffer(self) -> None:
         xml, reports = migration.patch_xml(
