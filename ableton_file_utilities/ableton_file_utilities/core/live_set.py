@@ -14,6 +14,8 @@ from typing import Iterable
 
 
 XML_TAG_RE = re.compile(r"<(/?)([A-Za-z_][\w:.-]*)([^<>]*?)(/?)>")
+TAG_VALUE_TEMPLATE = r"<{tag}\b[^>]*\bValue=\"([^\"]*)\""
+HEX_STATE_RE = re.compile(r"(<ProcessorState>\s*)([0-9A-Fa-f\s]+?)(\s*</ProcessorState>)", re.I | re.S)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -176,6 +178,43 @@ def set_next_pointee_id(xml: str, next_id: int) -> str:
     if not pattern.search(xml):
         raise ValueError("No NextPointeeId was found.")
     return pattern.sub(rf"\g<1>{next_id}\3", xml, count=1)
+
+
+def tag_value(text: str, tag: str) -> str | None:
+    match = re.search(TAG_VALUE_TEMPLATE.format(tag=re.escape(tag)), text)
+    return match.group(1) if match else None
+
+
+def tag_values(text: str, tag: str) -> list[str]:
+    return re.findall(TAG_VALUE_TEMPLATE.format(tag=re.escape(tag)), text)
+
+
+def replace_tag_value(text: str, tag: str, value: str, count: int = 0) -> str:
+    pattern = re.compile(rf"(<{re.escape(tag)}\b[^>]*\bValue=\")([^\"]*)(\")")
+    return pattern.sub(lambda match: f"{match.group(1)}{value}{match.group(3)}", text, count=count)
+
+
+def hex_text_to_bytes(text: str) -> bytes:
+    return bytes.fromhex("".join(text.split()))
+
+
+def bytes_from_hex_match(match: re.Match[str], group: int = 2) -> bytes:
+    return hex_text_to_bytes(match.group(group))
+
+
+def replace_processor_state(block: str, match: re.Match[str], processor: bytes, width: int = 80) -> str:
+    formatted = format_hex_like_existing(match.group(2), processor, width)
+    return f"{block[:match.start(2)]}{formatted}{block[match.end(2):]}"
+
+
+def format_hex_like_existing(existing: str, data: bytes, width: int = 80) -> str:
+    newline = "\r\n" if "\r\n" in existing else "\n"
+    indent = next((line[: len(line) - len(line.lstrip())] for line in existing.splitlines() if line.strip()), "")
+    hex_text = data.hex().upper()
+    chunks = [hex_text[index : index + width] for index in range(0, len(hex_text), width)]
+    if not indent:
+        return newline.join(chunks)
+    return chunks[0] + "".join(f"{newline}{indent}{chunk}" for chunk in chunks[1:])
 
 
 def remap_cloned_plugin_device(block: str, plugin_device_id: int, first_global_id: int) -> tuple[str, int]:
