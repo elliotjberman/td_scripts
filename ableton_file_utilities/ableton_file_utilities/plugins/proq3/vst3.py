@@ -6,6 +6,8 @@ import dataclasses
 import re
 import urllib.parse
 
+from ableton_file_utilities.core import live_set
+
 from .state import (
     MODE_BYTES,
     MODE_LABELS,
@@ -22,7 +24,7 @@ from .state import (
 
 
 PRO_Q_RE = re.compile(r"Pro-?Q(?:\s*(?:%20)?3)?", re.IGNORECASE)
-HEX_STATE_RE = re.compile(r"(<ProcessorState>\s*)([0-9A-Fa-f\s]+?)(\s*</ProcessorState>)", re.I | re.S)
+HEX_STATE_RE = live_set.HEX_STATE_RE
 
 
 @dataclasses.dataclass(frozen=True)
@@ -43,8 +45,7 @@ def state_from_block(block: str) -> ProQ3State:
     state_match = HEX_STATE_RE.search(block)
     if not state_match:
         raise ValueError("No ProcessorState blob found.")
-    processor = bytes.fromhex("".join(state_match.group(2).split()))
-    return ProQ3State(processor)
+    return ProQ3State(live_set.bytes_from_hex_match(state_match))
 
 
 def patch_block(block: str, target_mode: str) -> PatchResult:
@@ -54,7 +55,7 @@ def patch_block(block: str, target_mode: str) -> PatchResult:
         return PatchResult(block, plugin_name, None, None, False, "No ProcessorState blob found.")
 
     try:
-        state = ProQ3State(bytes.fromhex("".join(state_match.group(2).split())))
+        state = ProQ3State(live_set.bytes_from_hex_match(state_match))
         old_mode = state.mode()
         state.set_mode(target_mode)
     except ValueError as exc:
@@ -64,7 +65,7 @@ def patch_block(block: str, target_mode: str) -> PatchResult:
     new = MODE_BYTES[canonical_mode(target_mode)].hex().upper()
     if old == new:
         return PatchResult(block, plugin_name, old, new, False)
-    new_block = replace_processor_state(block, state_match, state.to_bytes())
+    new_block = live_set.replace_processor_state(block, state_match, state.to_bytes())
     return PatchResult(new_block, plugin_name, old, new, True)
 
 
@@ -75,30 +76,15 @@ def patch_block_bands(block: str, bands: list[object], target_mode: str = "zero_
         return PatchResult(block, plugin_name, None, None, False, "No ProcessorState blob found.")
 
     try:
-        state = ProQ3State(bytes.fromhex("".join(state_match.group(2).split())))
+        state = ProQ3State(live_set.bytes_from_hex_match(state_match))
         before = state.to_bytes()
         state.replace_bands(bands)
         state.set_mode(target_mode)
     except ValueError as exc:
         return PatchResult(block, plugin_name, None, None, False, str(exc))
 
-    new_block = replace_processor_state(block, state_match, state.to_bytes())
+    new_block = live_set.replace_processor_state(block, state_match, state.to_bytes())
     return PatchResult(new_block, plugin_name, None, None, state.to_bytes() != before)
-
-
-def replace_processor_state(block: str, match: re.Match[str], processor: bytes) -> str:
-    formatted = format_hex_like_existing(match.group(2), processor)
-    return f"{block[:match.start(2)]}{formatted}{block[match.end(2):]}"
-
-
-def format_hex_like_existing(existing: str, data: bytes) -> str:
-    newline = "\r\n" if "\r\n" in existing else "\n"
-    indent = next((line[: len(line) - len(line.lstrip())] for line in existing.splitlines() if line.strip()), "")
-    hex_text = data.hex().upper()
-    chunks = [hex_text[index : index + 80] for index in range(0, len(hex_text), 80)]
-    if not indent:
-        return newline.join(chunks)
-    return chunks[0] + "".join(f"{newline}{indent}{chunk}" for chunk in chunks[1:])
 
 
 def detect_plugin_name(block: str) -> str:

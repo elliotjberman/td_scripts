@@ -7,9 +7,11 @@ import re
 import struct
 import urllib.parse
 
+from ableton_file_utilities.core import live_set
+
 
 SATURN_2_RE = re.compile(r"Saturn(?:\s|%20)*2", re.IGNORECASE)
-HEX_STATE_RE = re.compile(r"(<ProcessorState>\s*)([0-9A-Fa-f\s]+?)(\s*</ProcessorState>)", re.I | re.S)
+HEX_STATE_RE = live_set.HEX_STATE_RE
 
 PROCESSOR_LENGTH = 3828
 PROCESSOR_HEADER = bytes.fromhex("4646425301000000B7030000")
@@ -70,7 +72,7 @@ def patch_block(block: str, target_mode: str) -> PatchResult:
 
     try:
         target = canonical_mode(target_mode)
-        processor = bytearray(bytes.fromhex("".join(state_match.group(2).split())))
+        processor = bytearray(live_set.bytes_from_hex_match(state_match))
         old_mode = quality_mode(processor)
     except ValueError as exc:
         return PatchResult(block, plugin_name, None, None, False, str(exc))
@@ -81,7 +83,7 @@ def patch_block(block: str, target_mode: str) -> PatchResult:
         return PatchResult(block, plugin_name, old, new, False)
 
     processor[QUALITY_OFFSET : QUALITY_OFFSET + 4] = QUALITY_BYTES[target]
-    new_block = replace_processor_state(block, state_match, bytes(processor))
+    new_block = live_set.replace_processor_state(block, state_match, bytes(processor))
     return PatchResult(new_block, plugin_name, old, new, True)
 
 
@@ -107,21 +109,6 @@ def validate_processor(processor: bytes) -> str | None:
     if len(processor) < QUALITY_OFFSET + 4:
         return "ProcessorState was shorter than the known Saturn 2 quality offset."
     return None
-
-
-def replace_processor_state(block: str, match: re.Match[str], processor: bytes) -> str:
-    formatted = format_hex_like_existing(match.group(2), processor)
-    return f"{block[:match.start(2)]}{formatted}{block[match.end(2):]}"
-
-
-def format_hex_like_existing(existing: str, data: bytes) -> str:
-    newline = "\r\n" if "\r\n" in existing else "\n"
-    indent = next((line[: len(line) - len(line.lstrip())] for line in existing.splitlines() if line.strip()), "")
-    hex_text = data.hex().upper()
-    chunks = [hex_text[index : index + 80] for index in range(0, len(hex_text), 80)]
-    if not indent:
-        return newline.join(chunks)
-    return chunks[0] + "".join(f"{newline}{indent}{chunk}" for chunk in chunks[1:])
 
 
 def detect_plugin_name(block: str) -> str:

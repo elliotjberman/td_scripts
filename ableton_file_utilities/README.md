@@ -69,6 +69,7 @@ Code layout:
 - `ableton_file_utilities/ableton_file_utilities/plugins/proq3/`: FabFilter Pro-Q 3 state model, VST3 blob adapter, and phase command.
 - `ableton_file_utilities/ableton_file_utilities/plugins/saturn2/`: FabFilter Saturn 2 VST3 blob adapter and quality command.
 - `ableton_file_utilities/ableton_file_utilities/plugins/curve_bender/`: UAD Curve Bender planning and Pro-Q conversion command.
+- `ableton_file_utilities/ableton_file_utilities/plugins/migration/`: one-time migration helpers for Windows-saved plugin devices.
 - `ableton_file_utilities/ableton_file_utilities/commands/`: cross-plugin workflows such as one-shot live preparation.
 
 ## UAD Chandler Curve Bender Conversion
@@ -184,3 +185,49 @@ The approach should be incremental:
 In practice, the next useful command is probably an `inspect` mode that reports
 all third-party plugins and exports their candidate state blobs to a folder.
 That gives us the raw material to learn the FabFilter format without guessing.
+
+## Windows Plugin Migration
+
+`migrate_windows_plugins.py` plans or patches Ableton plugin references that
+were saved on Windows and then opened on macOS. It was added for one-time
+machine migration cleanup, so it is deliberately conservative: report-only by
+default, patched-copy output only, and plugin-specific blob edits only where a
+fixture-backed migration has been calibrated.
+
+```powershell
+python "ableton_file_utilities\migrate_windows_plugins.py" "C:\path\to\Song.als" --scanner "C:\path\to\PluginScanner.txt"
+python "ableton_file_utilities\migrate_windows_plugins.py" "C:\path\to\Song.als" --scanner "C:\path\to\PluginScanner.txt" --output "C:\path\to\Song_mac_plugin_patch.als"
+python "ableton_file_utilities\migrate_windows_plugins.py" "C:\path\to\Song.als" --scanner "C:\path\to\PluginScanner.txt" --json
+python "ableton_file_utilities\migrate_windows_plugins.py" "C:\path\to\Song.als" --reference-set "C:\path\to\MacPluginTemplates.als" --target-format VST3 --plugin OTT --plugin Permut8 --plugin SieQ
+```
+
+Current classification and patch rules:
+
+- `windows-vst2-path-restore-failure`: the saved device points at a Windows
+  `.dll`, but Ableton has scanned a Mac VST2 with the same ID. The patch rewrites
+  only `<Path>` to the scanned `.vst` bundle path and preserves the saved state.
+- `windows-vst2-name-and-path-restore-failure`: same as above, plus a saved
+  Windows-only plug name such as `OTT_x64`. The patch rewrites `<Path>` and
+  `<PlugName>` while preserving the saved VST2 ID and state.
+- `windows-vst3-class-id-mismatch`: Ableton has scanned a same-name/same-vendor
+  Mac VST3, but the saved Windows-era VST3 class ID differs. The patch rewrites
+  `BranchDeviceId` and the VST3 `Uid` fields while preserving
+  `ProcessorState`, `ControllerState`, and the visible `ParameterList`.
+- `vst3-template-clone-with-parameter-map`: a Windows VST2 device is replaced
+  with a known-good Mac VST3 template device from `--reference-set`. Ableton IDs
+  are remapped, the source device on/off state is preserved, and visible
+  `PluginFloatParameter` values are copied by normalized parameter name.
+
+Current fixture-backed VST2-to-VST3 state migrations:
+
+- `elysia nvelope`: visible parameter mapping has been enough for the checked
+  concrete_live instances.
+- `OTT`: visible parameters are copied and the VST3 `ProcessorState` float list
+  is rewritten so the plugin UI opens with the same values.
+- `Permut8`: the source VST2 bank buffer and active program number are
+  transplanted into the VST3 wrapper state.
+- `Sie-Q`: the Soundtoys VST2 preset buffer is transplanted into the VST3
+  wrapper state after cloning a known-good Sie-Q VST3 template.
+
+Anything outside those calibrated paths should be treated as report data first,
+then promoted only after paired Windows/Mac fixtures prove the mapping.
