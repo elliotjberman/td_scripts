@@ -12,7 +12,10 @@ def onValueChange(channelValue, sampleIndex, val, prev):
     if channelValue == TEMP_DISCONNECT_VALUE:
         return
 
-    ableton_connected = channelValue > DISCONNECTED_VALUE or bool(get_current_song_slug())
+    # Intentional show state: while Ableton loads the next set, TDAbleton often
+    # stays disconnected so the in-between/placeholder can run over old audio.
+    # Songslug/song_id chooses which visual to show, not whether this gate opens.
+    ableton_connected = channelValue > DISCONNECTED_VALUE
     if ableton_connected:
         update_from_song_slug()
     else:
@@ -22,22 +25,20 @@ def onValueChange(channelValue, sampleIndex, val, prev):
 
 
 def update_from_song_slug() -> None:
-    song_slug = get_current_song_slug()
-    if song_slug:
-        turn_on_visual(song_slug)
-    else:
-        turn_on_placeholder()
+    for song_slug in current_song_slug_candidates():
+        if turn_on_visual(song_slug):
+            return
+    turn_on_placeholder()
 
     return
 
 
-def turn_on_visual(song_slug: str) -> None:
+def turn_on_visual(song_slug: str) -> bool:
     ableton_switcher = op("ableton_switcher")
     match = find_visual_for_song(song_slug)
     if match is None:
         print("No visual found for Songslug {!r}".format(song_slug))
-        turn_on_placeholder()
-        return
+        return False
 
     match_index, match_operator = match
     for index, connector in enumerate(ableton_switcher.inputs):
@@ -52,7 +53,7 @@ def turn_on_visual(song_slug: str) -> None:
     # in TD - sleep() will block
     run(op('toggle_visual').text, True, delayFrames = FPS * DELAY_SECONDS)
 
-    return
+    return True
 
 def turn_on_placeholder() -> None:
     op('placeholder').allowCooking = True
@@ -88,10 +89,19 @@ def song_slug_for_visual(operator) -> str:
 
 
 def get_current_song_slug() -> str:
+    candidates = current_song_slug_candidates()
+    return candidates[0] if candidates else ""
+
+
+def current_song_slug_candidates():
+    candidates = []
     slug = read_song_slug_source()
     if slug:
-        return slug
-    return get_legacy_song_slug()
+        candidates.append(slug)
+    slug = get_legacy_song_slug()
+    if slug and slug not in candidates:
+        candidates.append(slug)
+    return candidates
 
 
 def read_song_slug_source() -> str:
