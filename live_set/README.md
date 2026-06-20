@@ -57,7 +57,16 @@ that runtime checkout with `LIVE_SET_TD_SCRIPTS_ROOT`.
 
 The dashboard launches the stack, shows server/TouchDesigner/Ableton heartbeats,
 and renders the setlist with the current song highlighted when a current-song
-source is configured.
+source is configured. Startup leaves Ableton alone unless `LIVE_SET_ABLETON_SET`
+or `--ableton-set` points at a specific `.als`. When TouchDesigner is down, `t`
+relaunches the configured Big Kahuna TouchDesigner project. When Ableton is down,
+`a` enters song selection mode; then use Up/Down to move the orange setlist
+selection and Enter to launch that selected row. The
+Ableton launch goes through the setlist server's `/load-set` endpoint when the
+server is reachable, so the same process that opens the set also updates the
+server-reported current row. Press `q` to close the dashboard without stopping
+already-running apps. When Ableton is down, the server-reported song is shown as
+the last-open song rather than the current song.
 
 The wrapper auto-detects `~/setlist_manager` or a sibling `../setlist_manager`
 repo. When that server exposes `GET /status`, the dashboard uses it for server
