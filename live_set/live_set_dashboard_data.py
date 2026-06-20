@@ -276,23 +276,8 @@ def fallback_setlist_path(configured: str) -> Path | None:
     return None
 
 
-def setlist_from_status(data: object, base_path: str = "") -> list[dict[str, str]]:
-    if data is None:
-        return []
-    if isinstance(data, list):
-        return setlist_from_value(data, base_path)
-    if not isinstance(data, dict):
-        return []
-    base_path = base_path_from_mapping(data, base_path)
-    for key in ("setlist", "live_set", "liveSet", "sets", "queue", "songs", "tracks", "items"):
-        rows = setlist_from_value(data.get(key), base_path)
-        if rows:
-            return rows
-    for key in ("status", "state", "show"):
-        rows = setlist_from_status(data.get(key), base_path)
-        if rows:
-            return rows
-    return []
+def setlist_from_status(data: object) -> list[dict[str, str]]:
+    return setlist_from_value(data)
 
 
 def setlist_from_value(
@@ -300,76 +285,46 @@ def setlist_from_value(
     base_path: str = "",
     config_dir: Path | None = None,
 ) -> list[dict[str, str]]:
-    if value is None:
-        return []
     if isinstance(value, dict):
         base_path = base_path_from_mapping(value, base_path, config_dir)
-        for key in ("sets", "songs", "tracks", "items", "setlist", "entries"):
-            rows = setlist_from_value(value.get(key), base_path, config_dir)
-            if rows:
-                return rows
-        return []
-    if not isinstance(value, list):
-        return []
-    rows = []
-    for index, item in enumerate(value, start=1):
-        row = setlist_row(item, index, base_path)
-        if row["slug"] or row["name"]:
-            rows.append(row)
-    return rows
+        return setlist_from_value(value.get("sets"), base_path, config_dir)
+    if isinstance(value, list):
+        rows = []
+        for index, item in enumerate(value, start=1):
+            row = setlist_row(item, index, base_path)
+            if row["slug"] or row["name"]:
+                rows.append(row)
+        return rows
+    return []
 
 
 def setlist_row(item: object, index: int, base_path: str = "") -> dict[str, str]:
     if isinstance(item, str):
-        slug = parse_song_slug(item)
-        return {"index": str(index), "slug": slug, "name": item, "interlude": "", "ableton_path": ""}
+        return setlist_path_row(item, index, base_path)
     if not isinstance(item, dict):
-        text = str(item)
-        return {"index": str(index), "slug": parse_song_slug(text), "name": text, "interlude": "", "ableton_path": ""}
+        return setlist_path_row(str(item), index, base_path)
 
-    song = item.get("song")
-    merged = dict(item)
-    if isinstance(song, dict):
-        merged.update({key: value for key, value in song.items() if key not in merged})
-    elif isinstance(song, str) and not merged.get("name"):
-        merged["name"] = song
-
-    name = first_text(
-        merged,
-        ("display_name", "displayName", "title", "name", "song_name", "songName", "label", "path"),
-    )
-    ableton_path = resolve_set_path(
-        first_text(
-            merged,
-            ("ableton_path", "abletonPath", "ableton_set", "abletonSet", "als_path", "alsPath", "path", "file"),
-        ),
-        base_path,
-    )
-    slug = first_text(merged, ("slug", "song_slug", "songSlug", "key"))
-    if not slug:
-        slug = name
-    display = display_name_from_value(name or slug)
-    row_index = first_text(merged, ("position", "order", "index", "scene", "scene_number", "sceneNumber")) or str(index)
-    interlude = first_text(
-        merged,
-        (
-            "interlude",
-            "interlude_name",
-            "interludeName",
-            "between",
-            "between_song",
-            "betweenSong",
-            "transition",
-            "transition_name",
-            "transitionName",
-        ),
-    )
+    path_text = first_text(item, ("path", "ableton_path", "ableton_set"))
+    name = first_text(item, ("name", "song_name", "title", "slug")) or path_text
+    display = display_name_from_value(name)
+    slug = parse_song_slug(item.get("slug") or display)
     return {
-        "index": str(row_index),
-        "slug": parse_song_slug(display_name_from_value(slug)),
-        "name": str(display),
-        "interlude": interlude,
-        "ableton_path": ableton_path,
+        "index": str(item.get("index") or index),
+        "slug": slug,
+        "name": display,
+        "interlude": str(item.get("interlude") or ""),
+        "ableton_path": resolve_set_path(path_text, base_path),
+    }
+
+
+def setlist_path_row(path_text: str, index: int, base_path: str = "") -> dict[str, str]:
+    display = display_name_from_value(path_text)
+    return {
+        "index": str(index),
+        "slug": parse_song_slug(display),
+        "name": display,
+        "interlude": "",
+        "ableton_path": resolve_set_path(path_text, base_path),
     }
 
 
@@ -378,7 +333,7 @@ def base_path_from_mapping(
     fallback: str = "",
     config_dir: Path | None = None,
 ) -> str:
-    base_path = first_text(data, ("basePath", "base_path", "root", "rootPath"))
+    base_path = str(data.get("basePath") or "").strip()
     if not base_path:
         return fallback
     path = Path(base_path).expanduser()
@@ -397,63 +352,25 @@ def resolve_set_path(path_text: str, base_path: str = "") -> str:
 
 
 def current_song_from_status(data: object, setlist: list[dict[str, str]]) -> str:
-    if data is None:
-        return ""
-    if isinstance(data, str):
-        return parse_song_slug(data)
-    if isinstance(data, list):
-        return ""
     if not isinstance(data, dict):
         return parse_song_slug(data)
-
-    for key in (
-        "current_song",
-        "currentSong",
-        "active_song",
-        "activeSong",
-        "selected_song",
-        "selectedSong",
-        "now_playing",
-        "nowPlaying",
-        "current",
-        "current_path",
-        "currentPath",
-    ):
-        slug = slug_from_song_value(data.get(key))
-        if slug:
-            return slug
-    index = current_index_from_status(data)
-    if index is not None and 0 <= index < len(setlist):
-        return setlist[index]["slug"]
-    for key in ("status", "state", "show", "playback"):
-        slug = current_song_from_status(data.get(key), setlist)
-        if slug:
-            return slug
+    current_index = current_index_from_status(data)
+    if current_index is not None and 0 <= current_index < len(setlist):
+        return setlist[current_index]["slug"]
+    current_path = data.get("current_path")
+    if current_path:
+        return parse_song_slug(display_name_from_value(current_path))
     return ""
 
 
-def slug_from_song_value(value: object) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, dict):
-        slug_keys = ("slug", "song_slug", "songSlug", "key", "name", "song_name", "songName", "title", "path")
-        return parse_song_slug(
-            first_text(value, slug_keys),
-        )
-    return parse_song_slug(display_name_from_value(value))
-
-
 def current_index_from_status(data: dict[str, object]) -> int | None:
-    for key in ("current_index", "currentIndex", "selected_index", "selectedIndex", "song_index", "songIndex"):
-        value = data.get(key)
-        if value is None:
-            continue
-        try:
-            index = int(value)
-        except (TypeError, ValueError):
-            continue
-        return index
-    return None
+    value = data.get("current_index")
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def first_text(data: dict[str, object], keys: tuple[str, ...]) -> str:
