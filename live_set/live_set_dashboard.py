@@ -4,65 +4,64 @@
 from __future__ import annotations
 
 import argparse
-import csv
-import json
+import curses
 import os
 from pathlib import Path
 import signal
 import subprocess
 import sys
-import time
-import urllib.error
-import urllib.request
 
 try:
     from live_set import launch_live_set
+    from live_set.live_set_dashboard_data import (
+        DEFAULT_CURRENT_SONG_FILE,
+        check_url,
+        current_setlist,
+        current_song_slug,
+        read_server_snapshot,
+        request_setlist_server_load,
+    )
+    from live_set.live_set_dashboard_render import (
+        configure_curses,
+        current_setlist_index,
+        read_dashboard_key,
+        render,
+        render_curses,
+    )
 except ImportError:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     from live_set import launch_live_set
-
-
-REPO_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_CURRENT_SONG_FILE = Path("/tmp/td_live_set_song_slug")
-DEFAULT_SETLIST_FILES = (
-    Path.home() / "setlist_manager" / "setlist.json",
-    Path.home() / "setlist_manager" / "current_setlist.json",
-    Path.home() / "setlist_manager" / "live_set.json",
-    REPO_ROOT.parent / "setlist_manager" / "setlist.json",
-    REPO_ROOT / "live_set" / "setlist.json",
-)
-DEFAULT_STATUS_URLS = (
-    "http://127.0.0.1:8000/status",
-    "http://127.0.0.1:5000/status",
-    "http://127.0.0.1:3000/status",
-    "http://127.0.0.1:8765/status",
-)
-SPINNER = ("|", "/", "-", "\\")
-
-
-class Color:
-    RESET = "\033[0m"
-    BOLD = "\033[1m"
-    DIM = "\033[2m"
-    GREEN = "\033[32m"
-    YELLOW = "\033[33m"
-    RED = "\033[31m"
-    CYAN = "\033[36m"
+    from live_set.live_set_dashboard_data import (
+        DEFAULT_CURRENT_SONG_FILE,
+        check_url,
+        current_setlist,
+        current_song_slug,
+        read_server_snapshot,
+        request_setlist_server_load,
+    )
+    from live_set.live_set_dashboard_render import (
+        configure_curses,
+        current_setlist_index,
+        read_dashboard_key,
+        render,
+        render_curses,
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     server_proc: subprocess.Popen[bytes] | None = None
     launch_error = ""
+    launch_warnings: list[str] = []
 
     if args.launch_stack:
         try:
-            server_proc = launch_stack(args)
+            server_proc, launch_warnings = launch_stack(args)
         except launch_live_set.LaunchError as exc:
             launch_error = str(exc)
 
     try:
-        run_dashboard(args, server_proc, launch_error)
+        run_dashboard(args, server_proc, launch_error, launch_warnings)
     except KeyboardInterrupt:
         print("\nDashboard stopped. Live apps were left running.")
     return 0 if not launch_error else 2
@@ -117,7 +116,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--server-wait",
         type=float,
-        default=float(os.environ.get("LIVE_SET_SERVER_WAIT", "4")),
+        default=float(os.environ.get("LIVE_SET_SERVER_WAIT", "10")),
     )
     parser.add_argument(
         "--server-log",
@@ -131,10 +130,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def launch_stack(args: argparse.Namespace) -> subprocess.Popen[bytes] | None:
+def launch_stack(
+    args: argparse.Namespace,
+) -> tuple[subprocess.Popen[bytes] | None, list[str]]:
     td_project = launch_live_set.expand_path(args.td_project)
-    ableton_set = launch_live_set.expand_path(args.ableton_set) if args.ableton_set else None
     server_cwd = launch_live_set.resolve_server_cwd(args.server_cwd)
+    ableton_set = launch_live_set.expand_path(args.ableton_set) if args.ableton_set else None
     server_command = args.server_command or launch_live_set.infer_server_command(server_cwd)
 
     if not args.skip_touchdesigner:
@@ -143,6 +144,7 @@ def launch_stack(args: argparse.Namespace) -> subprocess.Popen[bytes] | None:
         launch_live_set.require_file(ableton_set, "Ableton set")
 
     server_proc: subprocess.Popen[bytes] | None = None
+    launch_warnings: list[str] = []
     if not args.skip_server:
         if not server_command:
             raise launch_live_set.LaunchError(
@@ -154,7 +156,14 @@ def launch_stack(args: argparse.Namespace) -> subprocess.Popen[bytes] | None:
                 server_cwd,
                 launch_live_set.expand_path(args.server_log),
             )
-            launch_live_set.wait_for_server(args.server_ready_url, args.server_wait, server_cwd, args.server_host)
+            try:
+                launch_live_set.wait_for_server(args.server_ready_url, args.server_wait, server_cwd, args.server_host)
+            except launch_live_set.LaunchError as exc:
+                if server_proc.poll() is not None:
+                    raise launch_live_set.LaunchError(
+                        f"Server exited early with code {server_proc.returncode}. Check {args.server_log}.",
+                    ) from exc
+                launch_warnings.append(str(exc))
             if server_proc.poll() is not None:
                 raise launch_live_set.LaunchError(
                     f"Server exited early with code {server_proc.returncode}. Check {args.server_log}.",
@@ -163,33 +172,139 @@ def launch_stack(args: argparse.Namespace) -> subprocess.Popen[bytes] | None:
     if not args.skip_touchdesigner:
         td_app = args.touchdesigner_app or launch_live_set.detect_touchdesigner_app()
         launch_live_set.open_with_app(td_app, td_project)
-    if not args.skip_ableton:
+    if not args.skip_ableton and ableton_set is not None:
         ableton_app = args.ableton_app or launch_live_set.detect_ableton_app()
         launch_live_set.open_with_app(ableton_app, ableton_set)
 
-    return server_proc
+    return server_proc, launch_warnings
 
 
 def run_dashboard(
     args: argparse.Namespace,
     server_proc: subprocess.Popen[bytes] | None,
     launch_error: str,
+    launch_warnings: list[str],
+) -> None:
+    if not args.once and sys.stdin.isatty():
+        curses.wrapper(lambda screen: run_dashboard_loop(args, server_proc, launch_error, launch_warnings, screen))
+        return
+    run_dashboard_loop(args, server_proc, launch_error, launch_warnings, None)
+
+
+def run_dashboard_loop(
+    args: argparse.Namespace,
+    server_proc: subprocess.Popen[bytes] | None,
+    launch_error: str,
+    launch_warnings: list[str],
+    screen: curses.window | None,
 ) -> None:
     frame = 0
+    selected_index: int | None = None
+    selection_mode = ""
+    keyboard_enabled = screen is not None
+    configure_curses(screen, args.interval)
+
     while True:
         server_snapshot = read_server_snapshot(args)
-        setlist, setlist_source = current_setlist(args, server_snapshot)
+        setlist = current_setlist(args, server_snapshot)[0]
         current_slug = current_song_slug(args, server_snapshot, setlist)
+        selected_index = normalize_selection(selected_index, setlist, current_slug)
         statuses = [
             server_status(args, server_proc, server_snapshot),
             process_status("TouchDesigner", args.touchdesigner_process, args.skip_touchdesigner),
             process_status("Ableton", args.ableton_process, args.skip_ableton),
         ]
-        render(frame, statuses, setlist, current_slug, setlist_source, launch_error, args.no_color)
+        actions = available_actions(args, statuses, selection_mode)
+        launch_notice = visible_launch_notice(statuses, launch_error, launch_warnings)
+
+        if screen is None:
+            render(
+                frame,
+                statuses,
+                setlist,
+                current_slug,
+                selected_index,
+                selection_mode,
+                launch_notice,
+                actions,
+                keyboard_enabled,
+                args.no_color,
+            )
+        else:
+            render_curses(
+                screen,
+                frame,
+                statuses,
+                setlist,
+                current_slug,
+                selected_index,
+                selection_mode,
+                launch_notice,
+                actions,
+                args.no_color,
+            )
+
         if args.once:
             return
+        key = read_dashboard_key(screen, max(args.interval, 0.1))
+        if key:
+            selected_index, selection_mode, should_quit = handle_dashboard_key(
+                args,
+                key,
+                setlist,
+                current_slug,
+                selected_index,
+                selection_mode,
+                actions,
+            )
+            if should_quit:
+                return
         frame += 1
-        time.sleep(max(args.interval, 0.1))
+
+
+def handle_dashboard_key(
+    args: argparse.Namespace,
+    key: str,
+    setlist: list[dict[str, str]],
+    current_slug: str,
+    selected_index: int | None,
+    selection_mode: str,
+    actions: list[dict[str, str]],
+) -> tuple[int | None, str, bool]:
+    if selection_mode == "ableton":
+        return handle_ableton_selection_key(args, key, setlist, selected_index, selection_mode)
+    if key == "q":
+        return selected_index, selection_mode, True
+    action = action_for_key(actions, key)
+    if action and action["resource"] == "AbletonSelect":
+        return normalize_selection(selected_index, setlist, current_slug), "ableton", False
+    if action:
+        run_launch_action(args, action)
+    return selected_index, selection_mode, False
+
+
+def handle_ableton_selection_key(
+    args: argparse.Namespace,
+    key: str,
+    setlist: list[dict[str, str]],
+    selected_index: int | None,
+    selection_mode: str,
+) -> tuple[int | None, str, bool]:
+    if key == "up":
+        return move_selection(selected_index, setlist, -1), selection_mode, False
+    if key == "down":
+        return move_selection(selected_index, setlist, 1), selection_mode, False
+    if key == "enter":
+        action = ableton_launch_action(args, setlist, selected_index)
+        if action is not None:
+            run_launch_action(args, action)
+            selection_mode = ""
+        return selected_index, selection_mode, False
+    if key == "escape":
+        return selected_index, "", False
+    if key == "q":
+        return selected_index, selection_mode, True
+    return selected_index, selection_mode, False
 
 
 def server_status(
@@ -237,19 +352,185 @@ def status(resource: str, state: str, detail: str) -> dict[str, str]:
     return {"resource": resource, "state": state, "detail": detail}
 
 
+def normalize_selection(
+    selected_index: int | None,
+    setlist: list[dict[str, str]],
+    current_slug: str,
+) -> int | None:
+    if not setlist:
+        return None
+    if selected_index is None:
+        current_index = current_setlist_index(setlist, current_slug)
+        return current_index if current_index is not None else 0
+    return min(max(selected_index, 0), len(setlist) - 1)
+
+
+def move_selection(
+    selected_index: int | None,
+    setlist: list[dict[str, str]],
+    offset: int,
+) -> int | None:
+    if not setlist:
+        return None
+    base = selected_index if selected_index is not None else 0
+    return (base + offset) % len(setlist)
+
+
+def available_actions(
+    args: argparse.Namespace,
+    statuses: list[dict[str, str]],
+    selection_mode: str,
+) -> list[dict[str, str]]:
+    by_resource = {item["resource"]: item for item in statuses}
+    actions = []
+    touchdesigner = by_resource.get("TouchDesigner")
+    if touchdesigner and should_offer_launch(touchdesigner, args.skip_touchdesigner):
+        td_project = launch_live_set.expand_path(args.td_project)
+        actions.append(
+            {
+                "key": "t",
+                "resource": "TouchDesigner",
+                "label": "Launch TouchDesigner",
+                "target": str(td_project),
+                "target_label": td_project.name,
+            },
+        )
+    ableton = by_resource.get("Ableton")
+    if selection_mode != "ableton" and ableton and should_offer_launch(ableton, args.skip_ableton):
+        actions.append(
+            {
+                "key": "a",
+                "resource": "AbletonSelect",
+                "label": "Select Ableton song",
+                "target": "",
+                "target_label": "",
+            },
+        )
+    return actions
+
+
+def should_offer_launch(status_item: dict[str, str], skipped: bool) -> bool:
+    return not skipped and status_item["state"] in {"fail", "wait"}
+
+
+def action_for_key(actions: list[dict[str, str]], key: str) -> dict[str, str] | None:
+    for action in actions:
+        if action["key"] == key:
+            return action
+    return None
+
+
+def run_launch_action(args: argparse.Namespace, action: dict[str, str]) -> str:
+    try:
+        if action["resource"] == "TouchDesigner":
+            return launch_touchdesigner(args, action.get("target", ""))
+        if action["resource"] == "Ableton":
+            return launch_ableton(args, action)
+    except launch_live_set.LaunchError as exc:
+        return f"{action['label']} failed: {exc}"
+    return f"Unknown action: {action['label']}"
+
+
+def ableton_launch_action(
+    args: argparse.Namespace,
+    setlist: list[dict[str, str]],
+    selected_index: int | None,
+) -> dict[str, str] | None:
+    ableton_set = selected_ableton_set(args, setlist, selected_index)
+    if ableton_set is None:
+        return None
+    return {
+        "key": "enter",
+        "resource": "Ableton",
+        "label": "Launch Ableton",
+        "target": str(ableton_set),
+        "target_label": selected_song_label(setlist, selected_index) or ableton_set.name,
+        "setlist_index": str(selected_index) if selected_index is not None else "",
+    }
+
+
+def launch_touchdesigner(args: argparse.Namespace, target: str) -> str:
+    if find_process(args.touchdesigner_process):
+        return "TouchDesigner is already running."
+    td_project = launch_live_set.expand_path(target or args.td_project)
+    launch_live_set.require_file(td_project, "TouchDesigner project")
+    td_app = args.touchdesigner_app or launch_live_set.detect_touchdesigner_app()
+    launch_live_set.open_with_app(td_app, td_project)
+    return f"Launched TouchDesigner: {td_project.name}."
+
+
+def launch_ableton(args: argparse.Namespace, action: dict[str, str]) -> str:
+    target = action.get("target", "")
+    target_label = action.get("target_label") or Path(target).stem or "selected set"
+    setlist_index = parse_optional_int(action.get("setlist_index", ""))
+    if setlist_index is not None:
+        ok, reached, detail = request_setlist_server_load(args, {"index": setlist_index})
+        if ok:
+            return f"Requested Ableton via setlist server: {target_label}."
+        if reached:
+            raise launch_live_set.LaunchError(f"setlist server load failed: {detail}")
+
+    ableton_set = launch_live_set.expand_path(target) if target else None
+    if ableton_set is not None:
+        if setlist_index is None:
+            ok, reached, detail = request_setlist_server_load(args, {"path": str(ableton_set)})
+            if ok:
+                return f"Requested Ableton via setlist server: {target_label}."
+            if reached:
+                raise launch_live_set.LaunchError(f"setlist server load failed: {detail}")
+        launch_live_set.require_file(ableton_set, "Ableton set")
+    ableton_app = args.ableton_app or launch_live_set.detect_ableton_app()
+    launch_live_set.open_with_app(ableton_app, ableton_set)
+    if ableton_set is None:
+        return "Launched Ableton."
+    return f"Launched Ableton: {ableton_set.stem}."
+
+
+def selected_ableton_set(
+    args: argparse.Namespace,
+    setlist: list[dict[str, str]],
+    selected_index: int | None,
+) -> Path | None:
+    if selected_index is not None and 0 <= selected_index < len(setlist):
+        ableton_path = setlist[selected_index].get("ableton_path", "")
+        if ableton_path:
+            return launch_live_set.expand_path(ableton_path)
+    if args.ableton_set:
+        return launch_live_set.expand_path(args.ableton_set)
+    return None
+
+
+def selected_song_label(setlist: list[dict[str, str]], selected_index: int | None) -> str:
+    if selected_index is None or not 0 <= selected_index < len(setlist):
+        return ""
+    return setlist[selected_index].get("name", "")
+
+
+def parse_optional_int(value: object) -> int | None:
+    if value in (None, ""):
+        return None
+    try:
+        return int(str(value))
+    except ValueError:
+        return None
+
+
+def visible_launch_notice(
+    statuses: list[dict[str, str]],
+    launch_error: str,
+    launch_warnings: list[str],
+) -> str:
+    if launch_error:
+        return launch_error
+    if not launch_warnings:
+        return ""
+    if any(item["resource"] == "Server" and item["state"] == "ok" for item in statuses):
+        return ""
+    return "; ".join(launch_warnings)
+
+
 def is_default_server_port_notice(detail: str) -> bool:
     return "serverPort missing" in detail
-
-
-def check_url(url: str) -> tuple[bool, str]:
-    try:
-        with urllib.request.urlopen(url, timeout=0.8) as response:
-            if 200 <= response.status < 400:
-                return True, f"HTTP {response.status}"
-            return False, f"HTTP {response.status}"
-    except (urllib.error.URLError, TimeoutError) as exc:
-        detail = exc.reason if isinstance(exc, urllib.error.URLError) else exc
-        return False, str(detail)
 
 
 def find_process(pattern: str) -> str:
@@ -258,467 +539,6 @@ def find_process(pattern: str) -> str:
         if result.returncode == 0 and result.stdout.strip():
             return " ".join(result.stdout.splitlines()[0].split()[:3])
     return ""
-
-
-def current_song_slug(
-    args: argparse.Namespace,
-    server_snapshot: dict[str, object],
-    setlist: list[dict[str, str]],
-) -> str:
-    slug = current_song_from_status(server_snapshot.get("data"), setlist)
-    if slug:
-        return slug
-    for value in (
-        args.current_song,
-        read_current_song_url(args.current_song_url),
-        read_current_song_file(args.current_song_file),
-    ):
-        slug = parse_song_slug(value)
-        if slug:
-            return slug
-    return ""
-
-
-def current_setlist(
-    args: argparse.Namespace,
-    server_snapshot: dict[str, object],
-) -> tuple[list[dict[str, str]], str]:
-    rows = setlist_from_status(server_snapshot.get("data"))
-    if rows:
-        return rows, f"server status {server_snapshot.get('url')}"
-    if args.setlist_url:
-        rows = read_setlist_url(args.setlist_url)
-        if rows:
-            return rows, args.setlist_url
-    fallback = fallback_setlist_path(args.setlist)
-    if fallback is not None:
-        rows = read_setlist(fallback)
-        if rows:
-            return rows, str(fallback)
-    if server_snapshot.get("url"):
-        return [], f"server status {server_snapshot.get('url')}"
-    return [], "server status"
-
-
-def read_server_snapshot(args: argparse.Namespace) -> dict[str, object]:
-    urls = status_urls(args)
-    last_error = "no status URL configured"
-    for url in urls:
-        payload, error = read_json_url(url)
-        if error:
-            last_error = f"{url}: {error}"
-            continue
-        return {"url": url, "data": payload, "error": ""}
-    return {"url": urls[0] if urls else "", "data": None, "error": last_error}
-
-
-def status_urls(args: argparse.Namespace) -> list[str]:
-    urls = []
-    for url in (args.status_url, args.server_ready_url, *DEFAULT_STATUS_URLS):
-        if url and url not in urls:
-            urls.append(url)
-    return urls
-
-
-def read_json_url(url: str) -> tuple[object | None, str]:
-    try:
-        with urllib.request.urlopen(url, timeout=0.8) as response:
-            payload = response.read().decode("utf-8", errors="replace").strip()
-            if not 200 <= response.status < 400:
-                return None, f"HTTP {response.status}"
-    except (urllib.error.URLError, TimeoutError) as exc:
-        detail = exc.reason if isinstance(exc, urllib.error.URLError) else exc
-        return None, str(detail)
-    if not payload:
-        return None, "empty response"
-    try:
-        return json.loads(payload), ""
-    except json.JSONDecodeError:
-        return None, "response was not JSON"
-
-
-def read_current_song_url(url: str | None) -> str:
-    if not url:
-        return ""
-    try:
-        with urllib.request.urlopen(url, timeout=0.8) as response:
-            payload = response.read().decode("utf-8", errors="replace").strip()
-    except (urllib.error.URLError, TimeoutError):
-        return ""
-    if not payload:
-        return ""
-    try:
-        data = json.loads(payload)
-    except json.JSONDecodeError:
-        return payload
-    if not isinstance(data, dict):
-        return str(data)
-    for key in ("song_slug", "slug", "song", "song_name", "current_song", "name"):
-        value = data.get(key)
-        if value:
-            return str(value)
-    return ""
-
-
-def read_current_song_file(path_text: str | None) -> str:
-    if not path_text:
-        return ""
-    path = Path(path_text).expanduser()
-    if not path.exists():
-        return ""
-    return path.read_text(encoding="utf-8").strip()
-
-
-def read_setlist(path: Path) -> list[dict[str, str]]:
-    if not path.exists():
-        return []
-    if path.suffix.lower() == ".json":
-        return read_setlist_json(path)
-    with path.open(newline="", encoding="utf-8") as file:
-        reader = csv.DictReader(file, delimiter="\t")
-        rows = []
-        for index, row in enumerate(reader, start=1):
-            song_name = row.get("song_name") or row.get("song") or row.get("slug") or ""
-            slug = parse_song_slug(song_name)
-            rows.append({"index": str(index), "slug": slug, "name": song_name or slug})
-        return rows
-
-
-def read_setlist_json(path: Path) -> list[dict[str, str]]:
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return []
-    return setlist_from_value(data)
-
-
-def read_setlist_url(url: str) -> list[dict[str, str]]:
-    data, error = read_json_url(url)
-    if error:
-        return []
-    return setlist_from_value(data)
-
-
-def fallback_setlist_path(configured: str) -> Path | None:
-    if configured:
-        path = launch_live_set.expand_path(configured)
-        return path if path.exists() else None
-    for path in DEFAULT_SETLIST_FILES:
-        if path.exists():
-            return path
-    return None
-
-
-def setlist_from_status(data: object) -> list[dict[str, str]]:
-    if data is None:
-        return []
-    if isinstance(data, list):
-        return setlist_from_value(data)
-    if not isinstance(data, dict):
-        return []
-    for key in ("setlist", "live_set", "liveSet", "sets", "queue", "songs", "tracks", "items"):
-        rows = setlist_from_value(data.get(key))
-        if rows:
-            return rows
-    for key in ("status", "state", "show"):
-        rows = setlist_from_status(data.get(key))
-        if rows:
-            return rows
-    return []
-
-
-def setlist_from_value(value: object) -> list[dict[str, str]]:
-    if value is None:
-        return []
-    if isinstance(value, dict):
-        for key in ("sets", "songs", "tracks", "items", "setlist", "entries"):
-            rows = setlist_from_value(value.get(key))
-            if rows:
-                return rows
-        return []
-    if not isinstance(value, list):
-        return []
-    rows = []
-    for index, item in enumerate(value, start=1):
-        row = setlist_row(item, index)
-        if row["slug"] or row["name"]:
-            rows.append(row)
-    return rows
-
-
-def setlist_row(item: object, index: int) -> dict[str, str]:
-    if isinstance(item, str):
-        slug = parse_song_slug(item)
-        return {"index": str(index), "slug": slug, "name": item, "interlude": ""}
-    if not isinstance(item, dict):
-        text = str(item)
-        return {"index": str(index), "slug": parse_song_slug(text), "name": text, "interlude": ""}
-
-    song = item.get("song")
-    merged = dict(item)
-    if isinstance(song, dict):
-        merged.update({key: value for key, value in song.items() if key not in merged})
-    elif isinstance(song, str) and not merged.get("name"):
-        merged["name"] = song
-
-    name = first_text(
-        merged,
-        ("display_name", "displayName", "title", "name", "song_name", "songName", "label", "path"),
-    )
-    slug = first_text(merged, ("slug", "song_slug", "songSlug", "key"))
-    if not slug:
-        slug = name
-    display = display_name_from_value(name or slug)
-    row_index = first_text(merged, ("position", "order", "index", "scene", "scene_number", "sceneNumber")) or str(index)
-    interlude = first_text(
-        merged,
-        (
-            "interlude",
-            "interlude_name",
-            "interludeName",
-            "between",
-            "between_song",
-            "betweenSong",
-            "transition",
-            "transition_name",
-            "transitionName",
-        ),
-    )
-    return {
-        "index": str(row_index),
-        "slug": parse_song_slug(display_name_from_value(slug)),
-        "name": str(display),
-        "interlude": interlude,
-    }
-
-
-def current_song_from_status(data: object, setlist: list[dict[str, str]]) -> str:
-    if data is None:
-        return ""
-    if isinstance(data, str):
-        return parse_song_slug(data)
-    if isinstance(data, list):
-        return ""
-    if not isinstance(data, dict):
-        return parse_song_slug(data)
-
-    for key in (
-        "current_song",
-        "currentSong",
-        "active_song",
-        "activeSong",
-        "selected_song",
-        "selectedSong",
-        "now_playing",
-        "nowPlaying",
-        "current",
-        "current_path",
-        "currentPath",
-    ):
-        slug = slug_from_song_value(data.get(key))
-        if slug:
-            return slug
-    index = current_index_from_status(data)
-    if index is not None and 0 <= index < len(setlist):
-        return setlist[index]["slug"]
-    for key in ("status", "state", "show", "playback"):
-        slug = current_song_from_status(data.get(key), setlist)
-        if slug:
-            return slug
-    return ""
-
-
-def slug_from_song_value(value: object) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, dict):
-        return parse_song_slug(
-            first_text(value, ("slug", "song_slug", "songSlug", "key", "name", "song_name", "songName", "title", "path")),
-        )
-    return parse_song_slug(display_name_from_value(value))
-
-
-def current_index_from_status(data: dict[str, object]) -> int | None:
-    for key in ("current_index", "currentIndex", "selected_index", "selectedIndex", "song_index", "songIndex"):
-        value = data.get(key)
-        if value is None:
-            continue
-        try:
-            index = int(value)
-        except (TypeError, ValueError):
-            continue
-        return index
-    return None
-
-
-def first_text(data: dict[str, object], keys: tuple[str, ...]) -> str:
-    for key in keys:
-        value = data.get(key)
-        if value is not None and str(value).strip():
-            return str(value)
-    return ""
-
-
-def parse_song_slug(value: object) -> str:
-    if value is None:
-        return ""
-    text = str(value).strip()
-    if not text:
-        return ""
-    marker = "[td:"
-    marker_start = text.find(marker)
-    if marker_start >= 0:
-        marker_end = text.find("]", marker_start)
-        if marker_end >= 0:
-            return normalize_song_slug(text[marker_start + len(marker):marker_end])
-    if text.startswith("td:"):
-        return normalize_song_slug(text[3:])
-    return normalize_song_slug(text)
-
-
-def normalize_song_slug(value: object) -> str:
-    text = str(value).strip().lower()
-    return "_".join(text.split())
-
-
-def display_name_from_value(value: object) -> str:
-    text = str(value).strip()
-    if not text:
-        return ""
-    path = Path(text.replace("\\", "/"))
-    name = path.name or text
-    if name.endswith(".als"):
-        name = name[:-4]
-    return name
-
-
-def render(
-    frame: int,
-    statuses: list[dict[str, str]],
-    setlist: list[dict[str, str]],
-    current_slug: str,
-    setlist_source: str,
-    launch_error: str,
-    no_color: bool,
-) -> None:
-    sys.stdout.write("\033[2J\033[H")
-    heartbeat = SPINNER[frame % len(SPINNER)]
-    print(colorize(f"LIVE SET CONTROL {heartbeat}", Color.BOLD + Color.CYAN, no_color))
-    print(time.strftime("%Y-%m-%d %H:%M:%S"))
-    if launch_error:
-        print(colorize(f"Launch warning: {launch_error}", Color.RED, no_color))
-    print()
-    print_resource_table(statuses, no_color)
-    print()
-    print_setlist_table(setlist, current_slug, setlist_source, no_color)
-    sys.stdout.flush()
-
-
-def print_resource_table(statuses: list[dict[str, str]], no_color: bool) -> None:
-    rows = []
-    for item in statuses:
-        label, color = state_label(item["state"])
-        rows.append((item["resource"], colorize(label, color, no_color), item["detail"]))
-    print_table(("Resource", "Beat", "Detail"), rows)
-
-
-def print_setlist_table(
-    setlist: list[dict[str, str]],
-    current_slug: str,
-    setlist_source: str,
-    no_color: bool,
-) -> None:
-    rows = []
-    current_index = current_setlist_index(setlist, current_slug)
-    for index, song in enumerate(setlist):
-        marker = " "
-        state = ""
-        row_color = ""
-        if current_index is not None and index == current_index:
-            marker = ">"
-            state = "NOW"
-            row_color = Color.GREEN
-        elif current_index is not None and index < current_index:
-            state = "done"
-            row_color = Color.DIM
-        elif current_index is not None:
-            state = "next"
-        values = (marker, song["index"], song["name"], state)
-        rows.append(tuple(colorize(value, row_color, no_color) for value in values))
-        interlude = song.get("interlude", "")
-        if interlude:
-            interlude_values = ("", "", f"  interlude: {interlude}", "")
-            rows.append(tuple(colorize(value, Color.DIM, no_color) for value in interlude_values))
-
-    if not rows:
-        print(colorize(f"No actual setlist rows found from {setlist_source}.", Color.YELLOW, no_color))
-        return
-    print(colorize(f"Setlist source: {setlist_source}", Color.DIM, no_color))
-    if not current_slug:
-        print(colorize("Current song: unknown", Color.YELLOW, no_color))
-    elif current_index is None:
-        print(colorize(f"Current song {current_slug!r} is not in the setlist.", Color.YELLOW, no_color))
-    else:
-        print(colorize(f"Current song: {current_slug}", Color.GREEN, no_color))
-    print_table(("", "#", "Song", "State"), rows)
-
-
-def current_setlist_index(setlist: list[dict[str, str]], current_slug: str) -> int | None:
-    if not current_slug:
-        return None
-    for index, song in enumerate(setlist):
-        if song["slug"] == current_slug:
-            return index
-    return None
-
-
-def state_label(state: str) -> tuple[str, str]:
-    if state == "ok":
-        return "[ OK ]", Color.GREEN
-    if state == "fail":
-        return "[FAIL]", Color.RED
-    if state == "skip":
-        return "[SKIP]", Color.DIM
-    return "[WAIT]", Color.YELLOW
-
-
-def print_table(headers: tuple[str, ...], rows: list[tuple[str, ...]]) -> None:
-    widths = [len(strip_ansi(header)) for header in headers]
-    for row in rows:
-        widths = [max(width, len(strip_ansi(value))) for width, value in zip(widths, row)]
-    divider = "+" + "+".join("-" * (width + 2) for width in widths) + "+"
-    print(divider)
-    print("| " + " | ".join(header.ljust(width) for header, width in zip(headers, widths)) + " |")
-    print(divider)
-    for row in rows:
-        print("| " + " | ".join(pad_ansi(value, width) for value, width in zip(row, widths)) + " |")
-    print(divider)
-
-
-def pad_ansi(value: str, width: int) -> str:
-    return value + " " * max(width - len(strip_ansi(value)), 0)
-
-
-def strip_ansi(value: str) -> str:
-    output = []
-    index = 0
-    while index < len(value):
-        if value[index:index + 2] == "\033[":
-            index += 2
-            while index < len(value) and value[index] != "m":
-                index += 1
-            index += 1
-        else:
-            output.append(value[index])
-            index += 1
-    return "".join(output)
-
-
-def colorize(value: object, color: str, no_color: bool) -> str:
-    text = str(value)
-    if no_color or not color:
-        return text
-    return f"{color}{text}{Color.RESET}"
 
 
 if __name__ == "__main__":

@@ -67,7 +67,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--ableton-set",
         default=os.environ.get("LIVE_SET_ABLETON_SET"),
-        help="Ableton .als file to open. If omitted, Ableton launches without a document.",
+        help="Explicit Ableton .als file to open. If omitted, Ableton is left for dashboard selection.",
     )
     parser.add_argument(
         "--ableton-app",
@@ -97,7 +97,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--server-wait",
         type=float,
-        default=float(os.environ.get("LIVE_SET_SERVER_WAIT", "4")),
+        default=float(os.environ.get("LIVE_SET_SERVER_WAIT", "10")),
         help="Seconds to wait after starting the server when no ready URL is configured.",
     )
     parser.add_argument(
@@ -114,6 +114,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def run(args: argparse.Namespace) -> int:
     td_project = expand_path(args.td_project)
+    server_cwd = resolve_server_cwd(args.server_cwd)
     ableton_set = expand_path(args.ableton_set) if args.ableton_set else None
 
     if not args.skip_touchdesigner:
@@ -123,7 +124,6 @@ def run(args: argparse.Namespace) -> int:
 
     td_app = args.touchdesigner_app or detect_touchdesigner_app()
     ableton_app = args.ableton_app or detect_ableton_app()
-    server_cwd = resolve_server_cwd(args.server_cwd)
     server_command = args.server_command or infer_server_command(server_cwd)
 
     print("Launch plan:")
@@ -141,7 +141,7 @@ def run(args: argparse.Namespace) -> int:
     if args.skip_ableton:
         print("  Ableton: skipped")
     elif ableton_set is None:
-        print(f"  Ableton: {ableton_app}")
+        print("  Ableton: dashboard selection")
     else:
         print(f"  Ableton: {ableton_app} -> {ableton_set}")
 
@@ -171,7 +171,7 @@ def run(args: argparse.Namespace) -> int:
                     )
         if not args.skip_touchdesigner:
             open_with_app(td_app, td_project)
-        if not args.skip_ableton:
+        if not args.skip_ableton and ableton_set is not None:
             open_with_app(ableton_app, ableton_set)
     except Exception:
         if server_proc is not None and server_proc.poll() is None:
