@@ -191,15 +191,19 @@ That gives us the raw material to learn the FabFilter format without guessing.
 `migrate_windows_plugins.py` plans or patches Ableton plugin references that
 were saved on Windows and then opened on macOS. It was added for one-time
 machine migration cleanup, so it is deliberately conservative: report-only by
-default, patched-copy output only, and plugin-specific blob edits only where a
-fixture-backed migration has been calibrated.
+default, new-copy output only, and plugin-specific blob edits only where a
+fixture-backed migration has been calibrated. It refuses to overwrite either
+the source set or an existing output file.
 
-```powershell
-python "ableton_file_utilities\migrate_windows_plugins.py" "C:\path\to\Song.als" --scanner "C:\path\to\PluginScanner.txt"
-python "ableton_file_utilities\migrate_windows_plugins.py" "C:\path\to\Song.als" --scanner "C:\path\to\PluginScanner.txt" --output "C:\path\to\Song_mac_plugin_patch.als"
-python "ableton_file_utilities\migrate_windows_plugins.py" "C:\path\to\Song.als" --scanner "C:\path\to\PluginScanner.txt" --json
-python "ableton_file_utilities\migrate_windows_plugins.py" "C:\path\to\Song.als" --reference-set "C:\path\to\MacPluginTemplates.als" --target-format VST3 --plugin OTT --plugin Permut8 --plugin SieQ
+```bash
+python3 ableton_file_utilities/migrate_windows_plugins.py "/path/to/Song.als" --scanner "/path/to/PluginScanner.txt"
+python3 ableton_file_utilities/migrate_windows_plugins.py "/path/to/Song.als" --scanner "/path/to/PluginScanner.txt" --output "/path/to/Song_mac_plugin_patch.als"
+python3 ableton_file_utilities/migrate_windows_plugins.py "/path/to/Song.als" --scanner "/path/to/PluginScanner.txt" --json
+python3 ableton_file_utilities/migrate_windows_plugins.py "/path/to/Song.als" --reference-set "/path/to/MacPluginTemplates.als" --target-format VST3 --plugin OTT --plugin Permut8 --plugin SieQ
 ```
+
+`--reference-set` and `--target-format` must be supplied together. The command
+also requires at least one explicit `--plugin` filter before cloning templates.
 
 Current classification and patch rules:
 
@@ -215,8 +219,9 @@ Current classification and patch rules:
   `ProcessorState`, `ControllerState`, and the visible `ParameterList`.
 - `vst3-template-clone-with-parameter-map`: a Windows VST2 device is replaced
   with a known-good Mac VST3 template device from `--reference-set`. Ableton IDs
-  are remapped, the source device on/off state is preserved, and visible
-  `PluginFloatParameter` values are copied by normalized parameter name.
+  are remapped, source on/off and matched parameter automation targets are
+  preserved, and visible `PluginFloatParameter` values are copied by normalized
+  parameter name.
 
 Current fixture-backed VST2-to-VST3 state migrations:
 

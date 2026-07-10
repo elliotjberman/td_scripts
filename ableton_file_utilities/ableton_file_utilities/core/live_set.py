@@ -19,7 +19,9 @@ HEX_STATE_RE = re.compile(r"(<ProcessorState>\s*)([0-9A-Fa-f\s]+?)(\s*</Processo
 GLOBAL_ID_RE = re.compile(r'(<(?:Pointee|AutomationTarget|ModulationTarget)\b[^>]*\bId=")(\d+)(")')
 DEVICE_ON_BLOCK_RE = re.compile(r"<On>\s*.*?</On>", re.S)
 DEVICE_ON_MANUAL_RE = re.compile(r'(<On>\s*.*?<Manual\b[^>]*\bValue=")([^"]*)(")', re.S)
-AUTOMATION_TARGET_ID_RE = re.compile(r'(<AutomationTarget\b[^>]*\bId=")(\d+)(")')
+GLOBAL_TARGET_ID_RES = tuple(
+    re.compile(rf'(<{tag}\b[^>]*\bId=")(\d+)(")') for tag in ("AutomationTarget", "ModulationTarget")
+)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -213,12 +215,28 @@ def replace_processor_state(block: str, match: re.Match[str], processor: bytes, 
 
 def format_hex_like_existing(existing: str, data: bytes, width: int = 80) -> str:
     newline = "\r\n" if "\r\n" in existing else "\n"
-    indent = next((line[: len(line) - len(line.lstrip())] for line in existing.splitlines() if line.strip()), "")
+    indent = next(
+        (line[: len(line) - len(line.lstrip())] for line in existing.splitlines()[1:] if line.strip()),
+        "",
+    )
     hex_text = data.hex().upper()
     chunks = [hex_text[index : index + width] for index in range(0, len(hex_text), width)]
     if not indent:
         return newline.join(chunks)
     return chunks[0] + "".join(f"{newline}{indent}{chunk}" for chunk in chunks[1:])
+
+
+def copy_global_target_ids(source: str, target: str) -> str:
+    for pattern in GLOBAL_TARGET_ID_RES:
+        source_match = pattern.search(source)
+        if source_match:
+            source_id = source_match.group(2)
+            target = pattern.sub(
+                lambda match: f"{match.group(1)}{source_id}{match.group(3)}",
+                target,
+                count=1,
+            )
+    return target
 
 
 def copy_device_on_state(source_block: str, target_block: str) -> str:
@@ -231,16 +249,11 @@ def copy_device_on_state(source_block: str, target_block: str) -> str:
         )
 
     source_on = DEVICE_ON_BLOCK_RE.search(source_block)
-    source_target = AUTOMATION_TARGET_ID_RE.search(source_on.group(0)) if source_on else None
-    if not source_target:
+    if not source_on:
         return target_block
 
     def replace_on_target(match: re.Match[str]) -> str:
-        return AUTOMATION_TARGET_ID_RE.sub(
-            lambda target: f"{target.group(1)}{source_target.group(2)}{target.group(3)}",
-            match.group(0),
-            count=1,
-        )
+        return copy_global_target_ids(source_on.group(0), match.group(0))
 
     return DEVICE_ON_BLOCK_RE.sub(replace_on_target, target_block, count=1)
 

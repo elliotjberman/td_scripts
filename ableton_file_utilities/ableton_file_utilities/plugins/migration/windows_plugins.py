@@ -7,14 +7,11 @@ known-good Windows and Mac fixtures.
 
 from __future__ import annotations
 
-import argparse
 import dataclasses
-import json
 import re
 import struct
-import sys
 import urllib.parse
-from pathlib import Path
+from collections.abc import Callable, Iterator
 
 from ableton_file_utilities.core import live_set
 
@@ -27,6 +24,13 @@ UID_BLOCK_RE = re.compile(r"<Uid>\s*(.*?)\s*</Uid>", re.S)
 FIELD_RE = re.compile(r'(<Fields\.([0-3])\b[^>]*\bValue=")(-?\d+)(")')
 SCANNER_FOUND_RE = re.compile(r"VST([23]): found: (.+)$")
 SCANNER_FIELD_RE = re.compile(r"\s*(vendor|device-class-id|path):\s*(.+?)\s*$")
+VST3_UUID_RE = re.compile(
+    r":([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})(?:\?|$)"
+)
+MIDI_CONTROLLER_RANGE_RE = re.compile(
+    r'<MidiControllerRange>\s*<Min\b[^>]*\bValue="([^"]*)"\s*/>\s*<Max\b[^>]*\bValue="([^"]*)"',
+    re.S,
+)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -84,16 +88,6 @@ class DeviceReport:
 
 
 @dataclasses.dataclass(frozen=True)
-class MigrationReport:
-    input_path: str
-    output_path: str | None
-    dry_run: bool
-    devices_seen: int
-    devices_changed: int
-    reports: list[DeviceReport]
-
-
-@dataclasses.dataclass(frozen=True)
 class _PluginDevice:
     block: str
     format: str
@@ -104,39 +98,13 @@ class _PluginDevice:
     path: str | None
     plug_name: str | None
     unique_id: str | None
-    vst3_uid: str | None
+    vst3_uids: tuple[str, ...]
 
 
 @dataclasses.dataclass(frozen=True)
 class _TemplateDevice:
     block: str
     device: _PluginDevice
-
-
-def migrate_file(
-    input_path: Path,
-    scanner_path: Path | None = None,
-    output_path: Path | None = None,
-    plugin_names: set[str] | None = None,
-    reference_path: Path | None = None,
-    target_format: str | None = None,
-) -> MigrationReport:
-    scanner = parse_plugin_scanner(scanner_path.read_text("utf-8", errors="replace")) if scanner_path else []
-    reference_xml = live_set.read(reference_path).xml if reference_path else None
-    document = live_set.read(input_path)
-    new_xml, reports = patch_xml(document.xml, scanner, plugin_names, reference_xml, target_format)
-
-    if output_path:
-        live_set.write(document, output_path, new_xml)
-
-    return MigrationReport(
-        input_path=str(input_path),
-        output_path=str(output_path) if output_path else None,
-        dry_run=output_path is None,
-        devices_seen=len(reports),
-        devices_changed=sum(1 for item in reports if item.changed),
-        reports=reports,
-    )
 
 
 def patch_xml(
@@ -149,7 +117,7 @@ def patch_xml(
     replacements: list[tuple[int, int, str]] = []
     reports: list[DeviceReport] = []
     normalized_targets = {_plugin_key(name) for name in plugin_names} if plugin_names else None
-    templates = _template_devices(reference_xml) if reference_xml else []
+    templates = _template_devices(reference_xml) if reference_xml and target_format else []
     next_id: int | None = None
 
     for start, end in live_set.iter_plugin_device_ranges(xml):
@@ -160,7 +128,11 @@ def patch_xml(
         if normalized_targets and _plugin_key(device.plugin_name) not in normalized_targets:
             continue
         candidate = find_candidate(device, scanner)
-        template = find_template_device(device, candidate, templates, target_format) if device.format == "VST2" else None
+        template = (
+            find_template_device(device, candidate, templates, target_format)
+            if device.format == "VST2" and templates and target_format
+            else None
+        )
         if template:
             if next_id is None:
                 next_id = live_set.next_pointee_id(xml)
@@ -239,15 +211,14 @@ def find_template_device(
     source: _PluginDevice,
     candidate: ScannedPlugin | None,
     templates: list[_TemplateDevice],
-    target_format: str | None = None,
+    target_format: str,
 ) -> _TemplateDevice | None:
     if source.format != "VST2":
         return None
-    desired_format = target_format or source.format
     for template in templates:
-        if template.device.format != desired_format:
+        if template.device.format != target_format:
             continue
-        if desired_format == "VST2" and source.unique_id and template.device.unique_id == source.unique_id:
+        if target_format == "VST2" and source.unique_id and template.device.unique_id == source.unique_id:
             return template
         if candidate and _plugin_key(template.device.plugin_name) == _plugin_key(candidate.name):
             return template
@@ -279,12 +250,11 @@ def clone_template_block(
     cloned = live_set.copy_device_on_state(source.block, cloned)
     mapped = map_parameter_values(source.block, cloned)
     mapped_block = mapped.block
-    if template.device.format == "VST3" and _plugin_key(source.plugin_name) == "ott":
-        mapped_block = map_ott_vst3_processor_state(source.block, mapped_block)
-    if template.device.format == "VST3" and _plugin_key(source.plugin_name) == "permut8":
-        mapped_block = map_permut8_vst3_processor_state(source.block, mapped_block)
-    if template.device.format == "VST3" and _plugin_key(source.plugin_name) == "sieq":
-        mapped_block = map_sieq_vst3_processor_state(source.block, mapped_block)
+    if template.device.format == "VST3":
+        mapper = VST3_PROCESSOR_STATE_MAPPERS.get(_plugin_key(source.plugin_name))
+        if mapper:
+            mapped_block = mapper(source.block, mapped_block)
+    changed = mapped_block != source.block
     return (
         mapped_block,
         next_id,
@@ -292,7 +262,7 @@ def clone_template_block(
             source,
             device_index,
             f"{template.device.format.lower()}-template-clone-with-parameter-map",
-            True,
+            changed,
             new_path=template.device.path,
             new_plug_name=template.device.plug_name,
             new_class_id=template.device.branch_device_id,
@@ -325,7 +295,7 @@ def _parse_vst2_device(block: str) -> _PluginDevice:
         path=path,
         plug_name=plug_name,
         unique_id=unique_id,
-        vst3_uid=None,
+        vst3_uids=(),
     )
 
 
@@ -343,7 +313,7 @@ def _parse_vst3_device(block: str) -> _PluginDevice:
         path=None,
         plug_name=None,
         unique_id=None,
-        vst3_uid=_vst3_uid_from_block(block),
+        vst3_uids=_vst3_uids_from_block(block),
     )
 
 
@@ -356,16 +326,13 @@ def _vst3_name(block: str) -> str | None:
     return named[-1] if named else None
 
 
-def _vst3_uid_from_block(block: str) -> str | None:
-    match = UID_BLOCK_RE.search(block)
-    if not match:
-        return None
-    fields: dict[int, int] = {}
-    for field in FIELD_RE.finditer(match.group(1)):
-        fields[int(field.group(2))] = int(field.group(3))
-    if set(fields) != {0, 1, 2, 3}:
-        return None
-    return uuid_from_signed_words([fields[index] for index in range(4)])
+def _vst3_uids_from_block(block: str) -> tuple[str, ...]:
+    uids: list[str] = []
+    for match in UID_BLOCK_RE.finditer(block):
+        fields = {int(field.group(2)): int(field.group(3)) for field in FIELD_RE.finditer(match.group(1))}
+        if set(fields) == {0, 1, 2, 3}:
+            uids.append(uuid_from_signed_words([fields[index] for index in range(4)]))
+    return tuple(uids)
 
 
 def _query_name(value: str | None) -> str | None:
@@ -397,7 +364,7 @@ def _vendor_from_browser_path(value: str | None) -> str | None:
 def find_candidate(device: _PluginDevice, scanner: list[ScannedPlugin]) -> ScannedPlugin | None:
     if device.format == "VST2":
         for plugin in scanner:
-            if plugin.format == "VST2" and plugin.class_id == device.branch_device_id:
+            if plugin.format == "VST2" and _same_class_id(plugin.class_id, device.branch_device_id):
                 return plugin
         if device.unique_id:
             for plugin in scanner:
@@ -406,7 +373,11 @@ def find_candidate(device: _PluginDevice, scanner: list[ScannedPlugin]) -> Scann
         return _name_candidate(device, scanner, "VST2")
 
     if device.format == "VST3":
-        exact = [plugin for plugin in scanner if plugin.format == "VST3" and plugin.class_id == device.branch_device_id]
+        exact = [
+            plugin
+            for plugin in scanner
+            if plugin.format == "VST3" and _same_class_id(plugin.class_id, device.branch_device_id)
+        ]
         if exact:
             return exact[0]
         return _name_candidate(device, scanner, "VST3")
@@ -431,7 +402,13 @@ def patch_block(
     device_index: int,
 ) -> tuple[str, DeviceReport]:
     if candidate is None:
-        return device.block, _report(device, device_index, "missing-install", False, warning="No scanned plugin candidate found.")
+        return device.block, _report(
+            device,
+            device_index,
+            "missing-install",
+            False,
+            warning="No scanned plugin candidate found.",
+        )
 
     if device.format == "VST2":
         return _patch_vst2_block(device, candidate, device_index)
@@ -481,11 +458,19 @@ def _patch_vst3_block(
     device_index: int,
 ) -> tuple[str, DeviceReport]:
     candidate_uid = _class_id_uuid(candidate.class_id)
-    saved_uid = _class_id_uuid(device.branch_device_id) or device.vst3_uid
+    branch_uid = _class_id_uuid(device.branch_device_id)
     candidate_device_id = _class_id_without_query(candidate.class_id)
     if not candidate_uid:
-        return device.block, _report(device, device_index, "missing-vst3-class-id", False, warning="Candidate has no VST3 class ID.")
-    if saved_uid == candidate_uid:
+        return device.block, _report(
+            device,
+            device_index,
+            "missing-vst3-class-id",
+            False,
+            warning="Candidate has no VST3 class ID.",
+        )
+    branch_matches = not device.branch_device_id or branch_uid == candidate_uid
+    preset_matches = all(uid == candidate_uid for uid in device.vst3_uids)
+    if branch_matches and preset_matches:
         return device.block, _report(device, device_index, "installed-vst3-id-match", False)
 
     block = device.block
@@ -548,7 +533,7 @@ def _replace_vst3_uid_fields(block: str, words: list[int]) -> str:
 def _class_id_uuid(class_id: str | None) -> str | None:
     if not class_id:
         return None
-    match = re.search(r":([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})(?:\?|$)", class_id)
+    match = VST3_UUID_RE.search(class_id)
     return match.group(1).lower() if match else None
 
 
@@ -556,6 +541,10 @@ def _class_id_without_query(class_id: str | None) -> str | None:
     if not class_id:
         return None
     return class_id.split("?", 1)[0]
+
+
+def _same_class_id(left: str | None, right: str | None) -> bool:
+    return bool(left and right and _class_id_without_query(left) == _class_id_without_query(right))
 
 
 def signed_words_from_uuid(uuid_text: str) -> list[int]:
@@ -578,28 +567,19 @@ def uuid_from_signed_words(words: list[int]) -> str:
 
 
 def extract_parameters(block: str) -> list[PluginParameter]:
-    params: list[PluginParameter] = []
+    return [parameter for parameter, _chunk in _iter_parameter_chunks(block)]
+
+
+def _iter_parameter_chunks(block: str) -> Iterator[tuple[PluginParameter, str]]:
     for match in PLUGIN_FLOAT_RE.finditer(block):
         chunk = match.group(1)
-        name = live_set.tag_value(chunk, "ParameterName")
-        manual = live_set.tag_value(chunk, "Manual")
-        if not name or manual is None:
-            continue
-        ranges = _manual_ranges(chunk)
-        params.append(
-            PluginParameter(
-                name=name,
-                parameter_id=live_set.tag_value(chunk, "ParameterId"),
-                manual=manual,
-                minimum=ranges[0],
-                maximum=ranges[1],
-            )
-        )
-    return params
+        parameter = _parameter_from_chunk(chunk)
+        if parameter:
+            yield parameter, chunk
 
 
 def map_parameter_values(source_block: str, target_block: str) -> ParameterMapResult:
-    source = {_norm(param.name): param for param in extract_parameters(source_block)}
+    source = {_norm(parameter.name): (parameter, chunk) for parameter, chunk in _iter_parameter_chunks(source_block)}
     mappings: list[ParameterMapping] = []
     skipped: list[str] = []
     pieces: list[str] = []
@@ -609,32 +589,32 @@ def map_parameter_values(source_block: str, target_block: str) -> ParameterMapRe
         pieces.append(target_block[cursor : match.start()])
         target_chunk = match.group(1)
         target_param = _parameter_from_chunk(target_chunk)
-        if target_param is None:
-            pieces.append(match.group(0))
-            cursor = match.end()
-            continue
+        replacement = match.group(0)
 
-        source_param = source.get(_norm(target_param.name))
-        if source_param is None:
-            skipped.append(target_param.name)
-            pieces.append(match.group(0))
-            cursor = match.end()
-            continue
+        if target_param:
+            source_entry = source.get(_norm(target_param.name))
+            if source_entry:
+                source_param, source_chunk = source_entry
+                target_value = _target_manual_value(source_param.manual, target_param.minimum, target_param.maximum)
+                new_chunk = _replace_manual_value(target_chunk, target_value)
+                new_chunk = live_set.copy_global_target_ids(source_chunk, new_chunk)
+                confidence = "exact-name" if source_param.name == target_param.name else "normalized-name"
+                mappings.append(
+                    ParameterMapping(
+                        source_name=source_param.name,
+                        target_name=target_param.name,
+                        source_value=source_param.manual,
+                        target_old_value=target_param.manual,
+                        target_new_value=target_value,
+                        confidence=confidence,
+                    )
+                )
+                if new_chunk != target_chunk:
+                    replacement = replacement.replace(target_chunk, new_chunk, 1)
+            else:
+                skipped.append(target_param.name)
 
-        target_value = _target_manual_value(source_param.manual, target_param.minimum, target_param.maximum)
-        new_chunk, changed = _replace_manual_value(target_chunk, target_value)
-        confidence = "exact-name" if source_param.name == target_param.name else "normalized-name"
-        mappings.append(
-            ParameterMapping(
-                source_name=source_param.name,
-                target_name=target_param.name,
-                source_value=source_param.manual,
-                target_old_value=target_param.manual,
-                target_new_value=target_value,
-                confidence=confidence,
-            )
-        )
-        pieces.append(match.group(0).replace(target_chunk, new_chunk, 1) if changed else match.group(0))
+        pieces.append(replacement)
         cursor = match.end()
 
     pieces.append(target_block[cursor:])
@@ -645,7 +625,10 @@ def map_ott_vst3_processor_state(source_block: str, target_block: str) -> str:
     source_values = _normalized_parameter_values_by_id(source_block)
     if not source_values:
         return target_block
-    values = [value for _parameter_id, value in sorted(source_values.items())]
+    parameter_ids = sorted(source_values)
+    if parameter_ids != list(range(len(parameter_ids))):
+        return target_block
+    values = [source_values[parameter_id] for parameter_id in parameter_ids]
     return _replace_processor_state_floats(target_block, values)
 
 
@@ -667,13 +650,26 @@ def map_sieq_vst3_processor_state(source_block: str, target_block: str) -> str:
     return _replace_sieq_processor_state_buffer(target_block, source_buffer)
 
 
+VST3_PROCESSOR_STATE_MAPPERS: dict[str, Callable[[str, str], str]] = {
+    "ott": map_ott_vst3_processor_state,
+    "permut8": map_permut8_vst3_processor_state,
+    "sieq": map_sieq_vst3_processor_state,
+}
+
+
 def _parameter_from_chunk(chunk: str) -> PluginParameter | None:
     name = live_set.tag_value(chunk, "ParameterName")
     manual = live_set.tag_value(chunk, "Manual")
     if not name or manual is None:
         return None
-    ranges = _manual_ranges(chunk)
-    return PluginParameter(name, live_set.tag_value(chunk, "ParameterId"), manual, ranges[0], ranges[1])
+    minimum, maximum = _manual_ranges(chunk)
+    return PluginParameter(
+        name=name,
+        parameter_id=live_set.tag_value(chunk, "ParameterId"),
+        manual=manual,
+        minimum=minimum,
+        maximum=maximum,
+    )
 
 
 def _normalized_parameter_values_by_id(block: str) -> dict[int, float]:
@@ -683,6 +679,8 @@ def _normalized_parameter_values_by_id(block: str) -> dict[int, float]:
             continue
         try:
             parameter_id = int(param.parameter_id)
+            if parameter_id < 0:
+                continue
             values[parameter_id] = float(param.manual)
         except ValueError:
             continue
@@ -765,7 +763,7 @@ def _write_u32_be(buffer: bytearray, offset: int, value: int) -> None:
 
 
 def _manual_ranges(chunk: str) -> tuple[str | None, str | None]:
-    range_match = re.search(r"<MidiControllerRange>\s*<Min\b[^>]*\bValue=\"([^\"]*)\"\s*/>\s*<Max\b[^>]*\bValue=\"([^\"]*)\"", chunk, re.S)
+    range_match = MIDI_CONTROLLER_RANGE_RE.search(chunk)
     if not range_match:
         return None, None
     return range_match.group(1), range_match.group(2)
@@ -790,9 +788,8 @@ def _format_float(value: float) -> str:
     return "0" if text == "-0" else text
 
 
-def _replace_manual_value(chunk: str, value: str) -> tuple[str, bool]:
-    replaced, count = MANUAL_VALUE_RE.subn(lambda match: f"{match.group(1)}{value}{match.group(3)}", chunk, count=1)
-    return replaced, count > 0
+def _replace_manual_value(chunk: str, value: str) -> str:
+    return MANUAL_VALUE_RE.sub(lambda match: f"{match.group(1)}{value}{match.group(3)}", chunk, count=1)
 
 
 def _norm(value: str) -> str:
@@ -804,76 +801,3 @@ def _plugin_key(value: str) -> str:
     if normalized.endswith("x64"):
         normalized = normalized[:-3]
     return normalized
-
-
-def report_to_dict(report: MigrationReport) -> dict[str, object]:
-    return {
-        "input_path": report.input_path,
-        "output_path": report.output_path,
-        "dry_run": report.dry_run,
-        "devices_seen": report.devices_seen,
-        "devices_changed": report.devices_changed,
-        "devices": [dataclasses.asdict(item) for item in report.reports],
-    }
-
-
-def format_report(report: MigrationReport) -> str:
-    action = "Dry run" if report.dry_run else "Patched copy for"
-    lines = [
-        f"{action}: {report.input_path}",
-        f"Plugin devices inspected: {report.devices_seen}",
-        f"Devices changed: {report.devices_changed}",
-    ]
-    if report.output_path:
-        lines.append(f"Output: {report.output_path}")
-
-    for item in report.reports:
-        lines.append("")
-        lines.append(f"[{item.device_index}] {item.plugin_name} ({item.format})")
-        lines.append(f"  classification: {item.classification}")
-        if item.saved_path:
-            lines.append(f"  saved path: {item.saved_path}")
-        if item.new_path:
-            lines.append(f"  new path: {item.new_path}")
-        if item.saved_plug_name and item.new_plug_name:
-            lines.append(f"  plug name: {item.saved_plug_name} -> {item.new_plug_name}")
-        if item.new_class_id:
-            lines.append(f"  class id: {item.saved_class_id} -> {item.new_class_id}")
-        if item.template_source:
-            lines.append(f"  template source: {item.template_source}")
-            lines.append(f"  parameters mapped: {item.parameters_mapped}")
-        if item.skipped_parameters:
-            lines.append("  skipped parameters: " + ", ".join(item.skipped_parameters[:12]))
-        if item.warning:
-            lines.append(f"  warning: {item.warning}")
-    return "\n".join(lines)
-
-
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Plan or patch Windows-saved plugin references in an Ableton .als file.")
-    parser.add_argument("session", type=Path, help="Path to an Ableton .als file.")
-    parser.add_argument("--scanner", type=Path, help="Ableton PluginScanner.txt from the target Mac.")
-    parser.add_argument("--output", type=Path, help="Write a patched copy. Without this, the command is report-only.")
-    parser.add_argument("--plugin", action="append", help="Only inspect/patch this plugin name. Repeat for multiple names.")
-    parser.add_argument("--reference-set", type=Path, help="Ableton set containing known-good Mac plugin devices to clone.")
-    parser.add_argument("--target-format", choices=("VST2", "VST3"), help="Clone reference devices in this plugin format when possible.")
-    parser.add_argument("--json", action="store_true", help="Print a machine-readable JSON report.")
-    return parser
-
-
-def main(argv: list[str] | None = None) -> int:
-    parser = build_parser()
-    args = parser.parse_args(argv)
-
-    try:
-        report = migrate_file(args.session, args.scanner, args.output, set(args.plugin or []), args.reference_set, args.target_format)
-    except Exception as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        return 1
-
-    print(json.dumps(report_to_dict(report), indent=2) if args.json else format_report(report))
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

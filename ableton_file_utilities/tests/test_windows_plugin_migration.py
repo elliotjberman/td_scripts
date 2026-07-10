@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import re
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from ableton_file_utilities.commands import windows_plugin_migration as command  # noqa: E402
 from ableton_file_utilities.plugins.migration import windows_plugins as migration  # noqa: E402
 
 
@@ -414,7 +416,10 @@ class WindowsPluginMigrationTests(unittest.TestCase):
         self.assertEqual(plugins[1].path, "/Library/Audio/Plug-Ins/VST/OTT.vst")
 
     def test_vst2_windows_path_and_name_are_rewritten_to_scanned_mac_bundle(self) -> None:
-        xml, reports = migration.patch_xml(f"<Ableton>{vst2_block()}</Ableton>", migration.parse_plugin_scanner(SCANNER))
+        xml, reports = migration.patch_xml(
+            f"<Ableton>{vst2_block()}</Ableton>",
+            migration.parse_plugin_scanner(SCANNER),
+        )
 
         self.assertEqual(len(reports), 1)
         self.assertEqual(reports[0].classification, "windows-vst2-name-and-path-restore-failure")
@@ -434,7 +439,10 @@ class WindowsPluginMigrationTests(unittest.TestCase):
         self.assertIn('<PlugName Value="OTT" />', xml)
 
     def test_vst3_class_id_and_uid_fields_are_rewritten_to_scanned_mac_class(self) -> None:
-        xml, reports = migration.patch_xml(f"<Ableton>{vst3_block()}</Ableton>", migration.parse_plugin_scanner(SCANNER))
+        xml, reports = migration.patch_xml(
+            f"<Ableton>{vst3_block()}</Ableton>",
+            migration.parse_plugin_scanner(SCANNER),
+        )
 
         self.assertEqual(len(reports), 1)
         self.assertEqual(reports[0].classification, "windows-vst3-class-id-mismatch")
@@ -445,6 +453,26 @@ class WindowsPluginMigrationTests(unittest.TestCase):
         self.assertIn('<Fields.1 Value="1986818149" />', xml)
         self.assertIn('<Fields.2 Value="1819898729" />', xml)
         self.assertIn('<Fields.3 Value="1629515382" />', xml)
+
+    def test_vst3_candidate_matching_ignores_scanner_name_query(self) -> None:
+        block = vst3_block().replace(
+            "device:vst3:audiofx:18716bb8-a2cf-2142-b5a3-bbdf77e70160",
+            "device:vst3:audiofx:5653546e-766c-7065-6c79-736961206e76",
+            1,
+        ).replace('<Name Value="elysia nvelope" />', '<Name Value="legacy nvelope name" />')
+        for old, new in (
+            ("410086328", "1448301678"),
+            ("-1563483838", "1986818149"),
+            ("-1247560737", "1819898729"),
+            ("2011627872", "1629515382"),
+        ):
+            block = block.replace(f'Value="{old}"', f'Value="{new}"', 1)
+
+        xml, reports = migration.patch_xml(f"<Ableton>{block}</Ableton>", migration.parse_plugin_scanner(SCANNER))
+
+        self.assertEqual(reports[0].classification, "windows-vst3-class-id-mismatch")
+        self.assertTrue(reports[0].changed)
+        self.assertEqual(xml.count('<Fields.0 Value="1448301678" />'), 2)
 
     def test_parameter_mapper_copies_visible_values_by_normalized_name(self) -> None:
         result = migration.map_parameter_values(parameter_block("0.875", "0.25"), parameter_block("0.1", "0.5"))
@@ -480,6 +508,33 @@ class WindowsPluginMigrationTests(unittest.TestCase):
         self.assertEqual([item.target_name for item in result.mappings], ["Depth", "Out Gain"])
         self.assertIn('<Manual Value="0.44" />', result.block)
 
+    def test_parameter_mapper_preserves_automation_and_modulation_targets(self) -> None:
+        source = parameter_block("0.875").replace(
+            '<Manual Value="0.875" />',
+            '<Manual Value="0.875" /><AutomationTarget Id="101" /><ModulationTarget Id="102" />',
+            1,
+        )
+        target = parameter_block("0.1").replace(
+            '<Manual Value="0.1" />',
+            '<Manual Value="0.1" /><AutomationTarget Id="901" /><ModulationTarget Id="902" />',
+            1,
+        )
+
+        result = migration.map_parameter_values(source, target)
+
+        self.assertIn('<AutomationTarget Id="101" />', result.block)
+        self.assertIn('<ModulationTarget Id="102" />', result.block)
+        self.assertNotIn('<AutomationTarget Id="901" />', result.block)
+        self.assertNotIn('<ModulationTarget Id="902" />', result.block)
+
+    def test_ott_processor_mapper_rejects_noncontiguous_parameter_ids(self) -> None:
+        source = vst2_block().replace('<ParameterId Value="0" />', '<ParameterId Value="1" />')
+        target = ott_vst3_template_block()
+
+        mapped = migration.map_ott_vst3_processor_state(source, target)
+
+        self.assertEqual(mapped, target)
+
     def test_vst2_template_clone_uses_mac_block_and_maps_parameters(self) -> None:
         source = vst2_block()
         template = (
@@ -494,6 +549,7 @@ class WindowsPluginMigrationTests(unittest.TestCase):
             f'<Ableton><LiveSet><NextPointeeId Value="100" />{source}</LiveSet></Ableton>',
             migration.parse_plugin_scanner(SCANNER),
             reference_xml=f"<Ableton>{template}</Ableton>",
+            target_format="VST2",
         )
 
         self.assertEqual(len(reports), 1)
@@ -504,6 +560,18 @@ class WindowsPluginMigrationTests(unittest.TestCase):
         self.assertIn('<PlugName Value="OTT" />', xml)
         self.assertIn('<Manual Value="0.25" />', xml)
         self.assertIn('<NextPointeeId Value="100" />', xml)
+
+    def test_reference_set_does_not_clone_without_explicit_target_format(self) -> None:
+        template = vst2_block().replace("OTT_x64", "wrong-template-name")
+
+        xml, reports = migration.patch_xml(
+            f'<Ableton><LiveSet><NextPointeeId Value="100" />{vst2_block()}</LiveSet></Ableton>',
+            migration.parse_plugin_scanner(SCANNER),
+            reference_xml=f"<Ableton>{template}</Ableton>",
+        )
+
+        self.assertEqual(reports[0].classification, "windows-vst2-name-and-path-restore-failure")
+        self.assertNotIn("wrong-template-name", xml)
 
     def test_vst2_source_can_clone_vst3_template_when_requested(self) -> None:
         xml, reports = migration.patch_xml(
@@ -570,6 +638,26 @@ class WindowsPluginMigrationTests(unittest.TestCase):
             migration.signed_words_from_uuid("5653546e-766c-7065-6c79-736961206e76"),
             [1448301678, 1986818149, 1819898729, 1629515382],
         )
+
+    def test_migrate_file_refuses_destructive_or_ambiguous_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source.als"
+            source.write_text("<Ableton />", encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "must not overwrite"):
+                command.migrate_file(source, output_path=source)
+
+            output = root / "existing.als"
+            output.write_text("existing", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "already exists"):
+                command.migrate_file(source, output_path=output)
+
+            with self.assertRaisesRegex(ValueError, "must be provided together"):
+                command.migrate_file(source, reference_path=source)
+
+            with self.assertRaisesRegex(ValueError, "--plugin"):
+                command.migrate_file(source, reference_path=source, target_format="VST3")
 
 
 if __name__ == "__main__":

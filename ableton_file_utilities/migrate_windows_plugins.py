@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ableton_file_utilities.plugins.migration.windows_plugins import main
+from ableton_file_utilities.commands.windows_plugin_migration import main
 
 
 if __name__ == "__main__":
