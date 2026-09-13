@@ -8,8 +8,9 @@ These are durable notes for future work on this repo.
 - Keep bridge/server integration explicit. Start it only from a user action, and keep HTTP timeouts short.
 - Execute DATs should be inactive by default unless they are directly supporting an open UI.
 - If TD freezes after adding a manager/component, first suspect an always-on Execute DAT or blocking Python call.
-- Keep Codex-only debug execution separate from live-performance workflow components. Use `debug/codex_debugger/` for arbitrary Python probes, not the Ableton hookup manager.
-- Do not blindly trust a project's `Home` parameter for debug tooling. Old `.toe` files can carry another machine/user path; prefer `Path.home()/td_scripts/debug/codex_debugger` or an explicit `CODEX_DEBUGGER_ROOT`.
+- Use Embody/Envoy for live agent inspection and authoring. Do not install or recreate the removed CodexDebugger file-backed execution bridge when that connection is unavailable.
+- Keep agent execution out of live-performance workflow components and the Ableton hookup manager.
+- Do not blindly trust a project's `Home` parameter for tooling. Old `.toe` files can carry another machine/user path; verify the current project's paths before use.
 
 ## TDAbleton / AbletonMIDI
 
