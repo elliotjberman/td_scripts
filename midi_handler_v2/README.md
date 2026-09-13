@@ -66,4 +66,4 @@ Keep live-performance work on the runtime path. Avoid broad Ableton discovery, U
 
 ## Debugging
 
-The Codex debug bridge is intentionally outside this folder at `debug/codex_debugger/`. Do not add arbitrary Python execution or polling bridge behavior to the live Ableton hookup manager.
+Use Embody/Envoy for live inspection and authoring. Do not add arbitrary Python execution or polling bridge behavior to the live Ableton hookup manager.

@@ -134,5 +134,6 @@ Backup/
 big_kahuna/config.json
 *.mp4
 *.mov
+# Keep local queues from the removed debugger out of version control.
 debug/codex_debugger/queue/
 codex_debugger/queue/

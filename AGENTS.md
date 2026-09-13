@@ -31,14 +31,17 @@ MIDI mapping, component authoring, or agent bridge code. Read
 
 ## Agent connection and verification
 
-- Prefer the user's Embody/Envoy integration for live TD inspection and authoring.
+- Use the user's Embody/Envoy integration for live TD inspection and authoring.
   Confirm available tools and the connected project before modifying operators.
 - As of the 2026-09-13 inspection, `/Users/elliot/embody_demo/.codex/config.toml`
   configures Envoy at `http://127.0.0.1:9870/mcp`. This `td_scripts` checkout has
   no project MCP configuration. Recheck current state rather than assuming a
   connection in another project is available here.
-- `debug/codex_debugger/` is an existing separate debugging fallback. Do not
-  embed arbitrary agent execution or bridge polling into performance components.
+- CodexDebugger has been removed. Do not use or recreate the file-backed Python
+  execution bridge. If Embody/Envoy is unavailable, diagnose its connection and
+  report any unresolved blocker instead of installing a substitute bridge.
+- Do not embed arbitrary agent execution or bridge polling into performance
+  components.
 - Distinguish files found on disk from live verification. Before declaring a
   reactive patch ready, verify its input signal, envelope/output response,
   parameter mapping, visible result, errors, and performance in TouchDesigner.
