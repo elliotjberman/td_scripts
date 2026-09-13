@@ -2,6 +2,10 @@
 
 Utilities for building Ableton MIDI source wrappers in TouchDesigner without the old TSV workflow.
 
+See [ScaledEnvelope](ScaledEnvelope.md) for the component's ADSR animation,
+output min/max, MIDI triggering, and number-key debugging workflow. Folder-level
+agent instructions are in [AGENTS.md](AGENTS.md).
+
 ## Install In A TD Project
 
 Run this from the TouchDesigner Textport:
