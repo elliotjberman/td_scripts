@@ -7,6 +7,8 @@ Read the relevant component guide before using or changing these components:
 - [DefaultValue](DefaultValue.md): a configured constant and incoming CHOP through
   an Override CHOP.
 - [MovieRecorder](MovieRecorder.md): video/audio recording and a recording indicator.
+- [TopCrossfade](TopCrossfade.md): direct transitions between TOP inputs, with
+  palette cycling that does not sweep through intermediate colors on wraparound.
 
 These guides distinguish saved implementation from user-confirmed workflow.
 Do not infer how often the user uses a component from its presence in this folder.
