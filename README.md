@@ -3,7 +3,9 @@ TouchDesigner scripts for VS Components
 
 Component guides: [ScaledEnvelope](midi_handler_v2/ScaledEnvelope.md),
 [ScreenShake](utils/ScreenShake.md), [TopVignette](utils/TopVignette.md),
-[DefaultValue](utils/DefaultValue.md), and [MovieRecorder](utils/MovieRecorder.md).
+[DefaultValue](utils/DefaultValue.md), [MovieRecorder](utils/MovieRecorder.md),
+[TopCrossfade](utils/TopCrossfade.md), [MidiHandler](midi_handler/MidiHandler.md),
+and the [RayTK component index](raytk/README.md).
 
 See [TouchDesigner development notes](TOUCHDESIGNER_DEV_NOTES.md) before changing TD runtime, debug bridge, TDAbleton, or MIDI mapping workflow code.
 

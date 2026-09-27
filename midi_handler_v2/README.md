@@ -2,6 +2,11 @@
 
 Utilities for building Ableton MIDI source wrappers in TouchDesigner without the old TSV workflow.
 
+For the current Bitwig integration with the existing handler, see
+[Bitwig note input](../midi_handler/Bitwig.md). It uses Derivative's official
+TDBitwig OSC components; these v2 Ableton source wrappers are not required for
+that connection.
+
 See [ScaledEnvelope](ScaledEnvelope.md) for the component's ADSR animation,
 output min/max, MIDI triggering, and number-key debugging workflow. Folder-level
 agent instructions are in [AGENTS.md](AGENTS.md).
