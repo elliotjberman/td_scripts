@@ -7,7 +7,10 @@ Component guides: [ScaledEnvelope](midi_handler_v2/ScaledEnvelope.md),
 [TopCrossfade](utils/TopCrossfade.md), [MidiHandler](midi_handler/MidiHandler.md),
 and the [RayTK component index](raytk/README.md).
 
-See [TouchDesigner development notes](TOUCHDESIGNER_DEV_NOTES.md) before changing TD runtime, debug bridge, TDAbleton, or MIDI mapping workflow code.
+See [Visual Structure](VISUAL_STRUCTURE.md) for shell, mapped-wrapper, and
+reusable-visual ownership.
+
+See [TouchDesigner development notes](TOUCHDESIGNER_DEV_NOTES.md) before changing TD runtime, agent integration, TDAbleton, or MIDI mapping workflow code.
 
 Use Embody/Envoy for live TouchDesigner agent inspection and authoring; see [agent connection guidance](AGENTS.md#agent-connection-and-verification).
 
