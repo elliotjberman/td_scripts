@@ -20,7 +20,8 @@ See the shared [ScaledEnvelope guide](../midi_handler_v2/ScaledEnvelope.md).
 The repository [MidiHandler.tox](MidiHandler.tox) now includes this routing
 interface. **Target Visual** defaults to the handler's parent for the original
 sibling-envelope layout; select the nested visual for a mapped wrapper.
-Missing targets raise visible errors instead of silently skipping a mapping.
+Missing targets raise visible errors after the remaining targets for that note
+have been attempted, so one broken route does not suppress valid routes.
 Tables and callbacks are embedded, with no loose TSV/Python file dependency.
 
 External TSVs are still useful as authoring data or for version-controlled song

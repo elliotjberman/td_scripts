@@ -21,15 +21,21 @@ class TriggerExt:
     def HandleNote(self, track_name: str, note_number: int, velocity: int) -> None:
         self.set_pitch(track_name, note_number)
         target_root = self.TargetRoot()
+        failures = []
         for name in self.get_target_operator_names_for_track(track_name, note_number):
-            target = target_root.opex(str(name))
-            if isinstance(target, triggerCHOP):
-                target.par.triggerpulse.pulse()
-            elif isinstance(target, baseCOMP):
-                target.store('velocity', velocity)
-                target.par.Trigger.pulse()
-            else:
-                raise TypeError('Unsupported MIDI target: ' + target.path)
+            try:
+                target = target_root.opex(str(name))
+                if isinstance(target, triggerCHOP):
+                    target.par.triggerpulse.pulse()
+                elif isinstance(target, baseCOMP):
+                    target.store('velocity', velocity)
+                    target.par.Trigger.pulse()
+                else:
+                    raise TypeError('Unsupported MIDI target: ' + target.path)
+            except Exception as error:
+                failures.append(f'{target_root.path}/{name}: {error}')
+        if failures:
+            raise RuntimeError('MIDI routing failed:\n' + '\n'.join(failures))
 
     def set_pitch(self, track_name: str, note_number: int) -> None:
         self.ownerComp.opex('last_note_' + track_name).par.value0 = note_number
