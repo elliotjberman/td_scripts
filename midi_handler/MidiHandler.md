@@ -17,13 +17,22 @@ wildcard note, and a note may have multiple target rows. The handler retains
 per-source last-note CHOPs and stores velocity on the triggered envelope.
 See the shared [ScaledEnvelope guide](../midi_handler_v2/ScaledEnvelope.md).
 
-This guide describes the embedded Teachers Pet variant. The repository
-[extension.py](extension.py) predates its Target Visual support; updating that
-source is separate implementation work. In the embedded variant, Target Visual is required;
-missing targets raise visible errors instead of silently skipping a mapping.
-The mapping tables are embedded, not synchronized to loose TSV files.
-The moved live instance embeds its extension and callback text, so routing does
-not depend on a local checkout being available during a show.
+The repository [MidiHandler.tox](MidiHandler.tox) now includes this routing
+interface. **Target Visual** defaults to the handler's parent for the original
+sibling-envelope layout; select the nested visual for a mapped wrapper.
+Missing targets raise visible errors after the remaining targets for that note
+have been attempted, so one broken route does not suppress valid routes.
+Tables and callbacks are embedded, with no loose TSV/Python file dependency.
+
+External TSVs are still useful as authoring data or for version-controlled song
+mappings. Import their contents into the Table DAT before exporting a performance
+TOX; do not leave Sync to File enabled unless that external dependency is intentional.
+Embedded tables improve deployment portability, not the quality of the mapping data.
+
+[extension.py](extension.py) and [table_creation_callbacks.py](table_creation_callbacks.py)
+are the reviewable sources. Run `update_component.update(handler)` in TD to embed
+source changes into an existing handler without altering its mapping rows, then
+save its TOX. This is an authoring action, not performance-time file loading.
 
 The note-routing entrypoint remains
 `HandleNote(source_name, note_number, velocity)`; the source must provide its
@@ -38,3 +47,11 @@ Target Visual. A temporary note-60 route triggered `PlaneNoiseEnvelope`: its
 output and the plane-noise amplitude both reached 0.2 and returned to zero.
 The temporary mapping and last-note CHOP were removed after this check. This
 verified the relocated routing entrypoint, not a live Bitwig connection.
+
+## Reusable export verification — 2026-09-28
+
+Loaded the saved component in a separate TD 2025.33070 test network. Synthetic
+notes verified exact-note plus wildcard routing, velocity storage, last-note
+output, note-off/source filtering, and visible missing-target errors. The exported
+TOX was reloaded under a renamed container and routed independently there.
+This check did not operate Bitwig or replace the performance patch.

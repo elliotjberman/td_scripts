@@ -1,48 +1,46 @@
 from typing import List, Tuple
 
-import TDFunctions as TDF
 
 class TriggerExt:
-	"""
-	Read and route MIDI data from AbletonMidi components
-	"""
+    """Route notes to triggers inside the configured target component."""
 
-	WILDCARD = "_"
+    WILDCARD = "_"
 
-	def __init__(self, ownerComp):
-		# The component to which this extension is attached
-		self.ownerComp = ownerComp
+    def __init__(self, ownerComp):
+        self.ownerComp = ownerComp
 
-	# Can't do statics in TriggerExt's otherwise I would
-	def NoteTableNameForTrack(self, track_name: str) -> str:
-		return track_name.replace("_midi", "_note_mappings")
+    def NoteTableNameForTrack(self, track_name: str) -> str:
+        return track_name.removesuffix('_midi') + '_note_mappings'
 
-	def TableHeaders(self) -> Tuple[str, str]:
-		return 'note_number', 'trigger_name'
+    def TableHeaders(self) -> Tuple[str, str]:
+        return 'note_number', 'trigger_name'
 
-	def HandleNote(self, track_name: str, note_number: int, velocity: int) -> None:
-		self.set_pitch(track_name, note_number)
-		trigger_names = self.get_target_operator_names_for_track(track_name, note_number)
+    def TargetRoot(self):
+        return self.ownerComp.opex(str(self.ownerComp.par.Targetroot))
 
-		for trigger_name in trigger_names:
-			operator = op(f'../{trigger_name}')
-			if operator is None:
-				continue
-			if type(operator) == triggerCHOP:
-				operator.par.triggerpulse.pulse()
-			if type(operator) == baseCOMP:
-				operator.store("velocity", velocity)
-				operator.par.Trigger.pulse()
+    def HandleNote(self, track_name: str, note_number: int, velocity: int) -> None:
+        self.set_pitch(track_name, note_number)
+        target_root = self.TargetRoot()
+        failures = []
+        for name in self.get_target_operator_names_for_track(track_name, note_number):
+            try:
+                target = target_root.opex(str(name))
+                if isinstance(target, triggerCHOP):
+                    target.par.triggerpulse.pulse()
+                elif isinstance(target, baseCOMP):
+                    target.store('velocity', velocity)
+                    target.par.Trigger.pulse()
+                else:
+                    raise TypeError('Unsupported MIDI target: ' + target.path)
+            except Exception as error:
+                failures.append(f'{target_root.path}/{name}: {error}')
+        if failures:
+            raise RuntimeError('MIDI routing failed:\n' + '\n'.join(failures))
 
-	def set_pitch(self, track_name: str, note_number: int) -> None:
-		op(f'last_note_{track_name}').par.value0 = note_number
+    def set_pitch(self, track_name: str, note_number: int) -> None:
+        self.ownerComp.opex('last_note_' + track_name).par.value0 = note_number
 
-	def get_target_operator_names_for_track(self, track_name: str, note_number: int) -> List[str]:
-		table_name = self.NoteTableNameForTrack(track_name)
-		note_table = op(table_name)
-		_, trigger_name_column = self.TableHeaders()
-
-		numbered_cells = note_table.cells(str(note_number), trigger_name_column)
-		wildcard_cells = note_table.cells(TriggerExt.WILDCARD, trigger_name_column)
-
-		return numbered_cells + wildcard_cells
+    def get_target_operator_names_for_track(self, track_name: str, note_number: int) -> List[str]:
+        table = self.ownerComp.opex(self.NoteTableNameForTrack(track_name))
+        return (table.cells(str(note_number), 'trigger_name')
+                + table.cells(self.WILDCARD, 'trigger_name'))

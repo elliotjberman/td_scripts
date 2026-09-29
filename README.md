@@ -17,3 +17,13 @@ Use Embody/Envoy for live TouchDesigner agent inspection and authoring; see [age
 See `ABLETON_LIVE_NOTES.md` for Ableton hardware/live-set conversion notes.
 See `ABLETON_AUTOMATION_XML_NOTES.md` for the automation-copying handoff model.
 See `live_set/README.md` for the setlist bridge and live-stack launcher.
+
+
+## Reusable DAW inputs and timing
+
+- [Bitwig input adapters](midi_handler/Bitwig.md): official OSC receivers,
+  note routing, continuous controls, and cue-track events.
+- [MidiHandler](midi_handler/MidiHandler.md): embedded tables and an explicit target visual.
+- [BarTrigger](utils/BarTrigger.md): standalone every-N-bars trigger.
+- [ControlMap](utils/ControlMap.md): native continuous range/clamp/lag mapping.
+- [NoteLengths](utils/NoteLengths.md): existing BPM-to-duration utility.

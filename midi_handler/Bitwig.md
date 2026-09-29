@@ -5,6 +5,60 @@ palette components. It communicates over OSC; the absence of a virtual MIDI port
 does not indicate that this controller is disabled. Inspect the existing
 controller/connection before proposing IAC buses or hardware MIDI routing.
 
+## Reusable adapters
+
+Use the stock Derivative receivers and the existing [MidiHandler](MidiHandler.md).
+There is no controller fork or replacement OSC bridge in this repository.
+
+### Notes
+
+1. Put an official `bitwigNote` receiver beside MidiHandler and name it `*_midi`.
+2. Connect it to the shared bridge, select the desired track, and pin it.
+3. Run `configure_bitwig.configure_note(receiver, handler, 'Exact Track Name')`
+   inside TD, with [configure_bitwig.py](configure_bitwig.py) loaded as a module.
+4. Set MidiHandler's **Target Visual** and edit the generated per-source table.
+
+The authoring helper embeds [bitwig_note_callback.py](bitwig_note_callback.py)
+and sets the receiver's Callback DAT. Its **MIDI Routing** page exposes the
+expected source track and handler reference. Positive-velocity events forward
+pitch/velocity through the same `HandleNote` API as the Ableton callback;
+note-offs and a mismatched track are ignored. Enable the official receiver's
+callbacks when ready. The helper does not change its connection or track selection.
+
+### Continuous controls and meters
+
+Use official `bitwigRemotesProject` / `bitwigRemotesDevice` for smooth knobs and
+`bitwigTrack`'s `track/audioEnvelope` for a track meter. Read the selected remote
+page and, when modulation matters, enable **Read Modulated Values** and use
+`parN/modVal` rather than assuming `parN/val` is the heard state. Select/Rename
+channels into the visual's input contract. [ControlMap](../utils/ControlMap.md)
+provides native range, clamp, and rise/fall lag controls when needed.
+
+Shared receivers belong in the mapped wrapper, independent of any one effect.
+Use Python parameter references or a native Bind CHOP at the visual's local-control
+interface. No CHOP exports or callbacks continuously copying values are needed.
+
+### Clock and cue events
+
+[BarTrigger](../utils/BarTrigger.md) is a standalone every-N-bars TOX driven by
+`bitwigSong`'s clock. [NoteLengths](../utils/NoteLengths.md) converts BPM to durations.
+
+A cue-row change is different: it occurs when a designated track starts a clip
+in a different row, even if no fixed number of bars has elapsed. Configure an
+official `bitwigClipSlot` receiver pinned to that cue track with
+`configure_bitwig.configure_scene(receiver, target, 'Publicpulse', 'Cue Track')`.
+The embedded [callback](bitwig_scene_callback.py) pulses that explicit target;
+it has no autofocus dependency. Initial observation, repeats, and stopped/empty
+rows are silent. Track/connection setting changes reset the baseline. Pulse
+**Resetbaseline** after switching projects or reconnecting the shared bridge if
+the receiver's own Track/Connect parameters did not change. A changed row after
+an empty row still triggers; restarting the same row does not.
+
+This is a cue-track convention, not a global scene-launched API. Populate the
+reference track where cues are needed. Drum fills on unrelated tracks cannot
+trigger it. Both adapter setup helpers embed code and use relative references;
+exported receivers need no checkout or external Python files at runtime.
+
 ## Authoring boundary
 
 For the visual-control workflow, Elliot authors Bitwig's controls, remote pages,
@@ -55,8 +109,7 @@ requirements for every project.
 embedded as `note_callback`. The callback uses integer `pitch` (0–127) and
 `velocity` (0–127) from `onNoteEvent`. Positive velocity routes through the
 existing handler; velocity zero is ignored so note-off does not retrigger the
-envelope. Its embedded implementation is `bitwig_note_callback.py` (not shipped in this
-documentation change).
+envelope. Its original embedded implementation predates the configurable reusable adapter above.
 That source expects an `Expectedtrack` parameter and ignores events from a
 different track. Older drum callbacks without this extra identity guard retain
 their pinned receiver behavior.
@@ -134,9 +187,7 @@ Master `Scene Cue` clips occupy performance rows 1–16. Stop row 17 and indepen
 fill rows 18–21 remain empty on Master; launching the stop row did not trigger
 autofocus. The installed TDBitwig scene-name bank
 alone is not a scene-launch signal.
-See [LiveControls](../raytk/LiveControls.md) for current status. The generic
-row-change callback is embedded from `bitwig_scene_callback.py`; that source
-is not shipped in this documentation change.
+See [LiveControls](../raytk/LiveControls.md) for current status. The original row-change callback was later generalized as `bitwig_scene_callback.py` above.
 Its Required Source Track guard suppresses callbacks if the observer reconnects
 to a different track; MC202 uses the same optional guard in its note callback.
 

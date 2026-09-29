@@ -2,6 +2,9 @@
 
 Read the relevant component guide before using or changing these components:
 
+- [BarTrigger](BarTrigger.md): configurable every-N-bars pulses from a named clock CHOP.
+- [ControlMap](ControlMap.md): native range/clamp/lag mapping and disabled-channel omission.
+- [NoteLengths](NoteLengths.md): BPM to musical durations; reuse the existing DAW-agnostic TOX.
 - [ScreenShake](ScreenShake.md): two-channel motion source; envelope-driven strength.
 - [TopVignette](TopVignette.md): image edge darkening with a frame-shaped falloff.
 - [DefaultValue](DefaultValue.md): a configured constant and incoming CHOP through
@@ -12,7 +15,7 @@ Read the relevant component guide before using or changing these components:
 
 These guides distinguish saved implementation from user-confirmed workflow.
 Do not infer how often the user uses a component from its presence in this folder.
-Current documentation work excludes Ableton-specific components and migration.
+
 
 ## User priorities
 

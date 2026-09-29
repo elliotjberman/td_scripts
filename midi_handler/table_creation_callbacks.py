@@ -1,26 +1,18 @@
-SPACING = 200
+"""Create embedded note tables when a sibling *_midi source is discovered."""
+
 
 def onFindOPGetInclude(dat, curOp, row):
-	return True
+    return True
+
 
 def onOPFound(dat, curOp, row, results):
-	midi_table = create_or_get_midi_table(curOp)
-	midi_table.nodeX = SPACING * (row - 1)
-
-	return
-
-def create_or_get_midi_table(midi_operator: op) -> op:
-	table_operator_name = parent().NoteTableNameForTrack(midi_operator.name)
-	note_table = op(table_operator_name)
-	if note_table is None:
-		note_table = create_new_midi_table(table_operator_name)
-
-	return note_table
-
-def create_new_midi_table(table_operator_name) -> op:
-	new_table = parent().create(tableDAT, table_operator_name)
-	new_table.par.file = f"{table_operator_name}.tsv"
-	new_table.par.syncfile = True
-	new_table.par.edit.pulse()
-	new_table.insertRow(parent().TableHeaders())
-	return new_table
+    handler = dat.parent()
+    name = handler.NoteTableNameForTrack(curOp.name)
+    if handler.op(name) is not None:
+        return
+    table = handler.create(tableDAT, name)
+    table.clear()
+    table.appendRow(handler.TableHeaders())
+    # Match each source table to its last-note row, with a small gutter.
+    table.nodeX = -150
+    table.nodeY = -120 - (row - 1) * (table.nodeHeight + 30)
