@@ -5,6 +5,8 @@ from __future__ import annotations
 import dataclasses
 import re
 
+from ableton_file_utilities.core import live_set
+
 
 CURVE_BENDER_RE = re.compile(r"(Curve%20Bender|Curve Bender)", re.I)
 PARAM_RE = re.compile(r"<PluginFloatParameter\b[^>]*>(.*?)</PluginFloatParameter>", re.S)
@@ -122,9 +124,9 @@ def extract_params(block: str) -> dict[str, float]:
     params: dict[str, float] = {}
     for match in PARAM_RE.finditer(block):
         chunk = match.group(1)
-        name = _tag_value(chunk, "ParameterName")
-        value = _tag_value(chunk, "Manual")
-        parameter_id = _tag_value(chunk, "ParameterId")
+        name = live_set.tag_value(chunk, "ParameterName")
+        value = live_set.tag_value(chunk, "Manual")
+        parameter_id = live_set.tag_value(chunk, "ParameterId")
         if name and value and parameter_id != "-1":
             params[name] = float(value)
     return params
@@ -233,11 +235,6 @@ def _input_name(prefix: str) -> str:
 
 def _on(value: float | None) -> bool:
     return bool(value is not None and value >= 0.5)
-
-
-def _tag_value(chunk: str, tag: str) -> str | None:
-    match = re.search(rf"<{tag}\b[^>]*\bValue=\"([^\"]*)\"", chunk)
-    return match.group(1) if match else None
 
 
 def detect_plugin_name(block: str) -> str:
