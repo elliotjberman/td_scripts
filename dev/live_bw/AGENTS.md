@@ -1,8 +1,7 @@
 # Live master development
 
 Read [the runtime instructions](../../live_bw/AGENTS.md) before authoring.
-`authoring/` contains finite builders/checks; `results/` preserves verification,
-profiles, previews and review provenance. New experiments belong in `research/`.
+Keep experiments and generated verification output outside the release file set.
 The current editable master is `envoy_live_bw.toe`, with the existing
 Embody/Envoy integration. The production master is `../../live_bw/live_bw.toe`.
 Both screens are edited within this master and exported to the two canonical
@@ -26,6 +25,3 @@ standalone screen projects or duplicate component exports for routine edits.
   mapped project outside the warmed set remains selectable and logs its accepted
   fallback transition.
   Keep finite probes out of the production output network.
-- `authoring/verify_reopen.py` checks an already reopened project. Its saved
-  preference snapshot is provenance for the original run; capture the current
-  save-prompt value before any new authoring run that changes it.

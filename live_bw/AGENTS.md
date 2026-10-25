@@ -9,14 +9,14 @@ authoring; keep its integration and `.venv` outside the clean runtime TOE.
 - Keep official `bitwigMain`/`bitwigSong`, resolution and constant Home in the
   shell. Keep song routing/MIDIHandler in mapped wrappers and artistic controls,
   envelopes and rendering in their nested visuals. Read the
-  [Resignation guide](../big_kahuna/individual_tracks/resignation_live/resignation_bw_live.md)
+  [track export guide](tracks/README.md)
   and [Connection Screen guide](ConnectionScreen.md) before changing those components.
 - The production master requires matching selected-project identities from the
   official bridge and the read-only Audio Engine Handoff controller, with that
   project's engine active. Tab selection alone holds the accepted visual;
   dropping MIDI/control input during that interval is intentional. Do not add
   input caching, time-based switch delays, or polling. See [controller setup](bitwig/README.md).
-  The master has no Mock source selector or automatic test cycle. Preserve the three real
+  The master has no Mock source selector or automatic test cycle. Preserve the four real
   project names in README.md. Coordinate shared DAW use before live checks;
   connecting observers does not authorize UI changes or playback control.
 - Gate every song receiver by its wrapper's project identity while preserving
@@ -83,8 +83,7 @@ authoring; keep its integration and `.venv` outside the clean runtime TOE.
   Verify full-image endpoints with passive snapshots after one master demand,
   hidden TOP cook deltas, queued requests, stale retirement callbacks, runtime
   errors and save/reopen. Report finite benchmark results with their scope;
-  see [Performance.md](../dev/live_bw/results/Performance.md). Do not present
-  mock evidence as actual Bitwig integration.
+  distinguish isolated checks from actual Bitwig integration.
 
 Add a future visual End action or extension-resource destructor only when its
 shared contract or real resources require it.

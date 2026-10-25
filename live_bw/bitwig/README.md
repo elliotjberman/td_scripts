@@ -42,7 +42,6 @@ When another Song receiver joins, the bridge briefly resubscribes the shared
 transport listener so the official controller flushes constants such as tempo.
 This changes subscriptions, not Bitwig's playback or engine state.
 
-The finite [compatibility patch](../../dev/live_bw/authoring/patch_bridge_cursor_reuse.py)
-records the exact edits to the native source. It is already embedded in the
-saved shell, is not executed during performance, and does not rewrite imported
-song mappings. Recheck this patch when upgrading TDBitwig.
+The cursor-reuse compatibility patch is embedded in the saved shell and
+preserved in Git history. It does not rewrite imported song mappings. Recheck
+this behavior when upgrading TDBitwig.

@@ -72,10 +72,7 @@ the connection screen is `project1/live_bw/visuals/screensaver`. Save their
 components to `loading_view.tox` and `connection_screen.tox`. Standalone screen
 projects and duplicate component exports have been retired.
 
-Verification includes five native presentation states, the real 0→4 preparation
-sequence with Ready/output gating, 1080p output, native package round
-trips, four rendered screenshots, missing-preview fallback, and saved-master
-reopen. The startup hard cut is checked at the first Ready observation; normal
-song crossfades retain their existing duration. No hardware audio or Bitwig playback is triggered
-by these checks. Reports and screenshots are in `../dev/live_bw/results` with
-the `programme_` prefix.
+Verification has covered the real 0→4 preparation sequence, loading/error
+presentation, the hard cut to the connection screen, preview fallback, and
+saved-master reopen. No hardware audio or Bitwig playback is triggered by
+these checks. Historical captures remain recoverable in Git.

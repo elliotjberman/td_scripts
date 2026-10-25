@@ -102,8 +102,7 @@ its parent master. Presentation reads only these public parameters:
 | `Loadstatus` | Preparation phase or explicit error message. |
 
 Read those parameters to build a new skin and return an `out1` TOP at the host
-resolution. `loading_readout.py` formats the current programme presentation;
-the earlier plain-text skin used `loading_caption.py`. Neither is part of the
+resolution. `loading_readout.py` formats the programme presentation independently of the
 loader. `SetLoader` does not access Text TOPs, fonts or presentation operators.
 The master's `output_gate` selects the view while Ready is false and show output
 when Ready is true. Progress counts completed wrappers, not estimated seconds.
