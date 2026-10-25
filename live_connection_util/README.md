@@ -230,8 +230,9 @@ In TouchDesigner, use a native
 
 This uses TD's native numeric receiver without a Python JSON parser, custom
 socket receiver, or shared-memory synchronization. TD consumes the measured
-levels from Rust and does not need a second audio reader. A TouchDesigner receiver/presentation and the full-set launcher are separate
-follow-up changes; neither is required to run this utility.
+levels from Rust and does not need a second audio reader. The optional [vs_set launcher](../live_bw/VSSet.md) coordinates the full set.
+The TouchDesigner receiver/presentation is delivered separately. Neither is
+required to run this utility.
 
 All values are OSC float32. Global addresses are:
 
