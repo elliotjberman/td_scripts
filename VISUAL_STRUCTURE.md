@@ -130,4 +130,4 @@ the outgoing image remains visible.
 Verify an all-family cook census after fade-out, allowing capture/UI demand to
 settle. Check returning to each visual as well as leaving it. Static allocation
 is not evidence of ongoing CPU/GPU work, and checking only final TOP cook
-counters is insufficient. See the [three-song cleanup evidence](dev/live_bw/updates/idle_cleanup_20261021/README.md).
+counters is insufficient.
