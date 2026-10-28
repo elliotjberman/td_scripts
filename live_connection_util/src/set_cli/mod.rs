@@ -171,13 +171,14 @@ impl MidiTest {
         })
     }
 
-    fn stop(&mut self) -> Result<()> {
+    fn stop(&mut self, mut check_health: impl FnMut() -> Result<()>) -> Result<()> {
+        let mut health = check_health();
         if let Some(status) = self.child.try_wait()? {
             ensure!(
                 status.success(),
                 "MIDI test failed ({status}); Bitwig was not opened."
             );
-            return Ok(());
+            return health;
         }
         // Only the child we own. Its handler releases notes and drops both audio streams.
         let result = unsafe { libc::kill(self.child.id() as i32, libc::SIGINT) };
@@ -188,12 +189,14 @@ impl MidiTest {
         );
         let until = Instant::now() + Duration::from_secs(10);
         while Instant::now() < until {
+            // Keep polling, but retain the first failure until MIDI cleanup finishes.
+            health = health.and(check_health());
             if let Some(status) = self.child.try_wait()? {
                 ensure!(
                     status.success(),
                     "MIDI shutdown failed ({status}); Bitwig was not opened."
                 );
-                return Ok(());
+                return health;
             }
             thread::sleep(Duration::from_millis(50));
         }
@@ -205,7 +208,7 @@ impl MidiTest {
 }
 impl Drop for MidiTest {
     fn drop(&mut self) {
-        if let Err(error) = self.stop() {
+        if let Err(error) = self.stop(|| Ok(())) {
             eprintln!("{error:#}");
         }
     }
@@ -373,7 +376,7 @@ pub fn run() -> Result<()> {
                 &mut td,
             )?;
             println!("Stopping MIDI and releasing the audio interface…");
-            midi.stop()?;
+            midi.stop(|| td.check_ready())?;
             drop(midi);
             td.check_ready()?;
             println!("MIDI test has exited. Opening the Bitwig set.");
@@ -395,7 +398,7 @@ mod tests {
         let mut midi = MidiTest::start(&binary, true).unwrap();
         thread::sleep(Duration::from_millis(500));
         assert!(midi.child.try_wait().unwrap().is_none());
-        midi.stop().unwrap();
+        midi.stop(|| Ok(())).unwrap();
         assert!(midi.child.try_wait().unwrap().unwrap().success());
     }
 
@@ -404,6 +407,6 @@ mod tests {
         let child = Command::new("/usr/bin/false").spawn().unwrap();
         let mut midi = MidiTest { child };
         midi.child.wait().unwrap();
-        assert!(midi.stop().is_err());
+        assert!(midi.stop(|| Ok(())).is_err());
     }
 }

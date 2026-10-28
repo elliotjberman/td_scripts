@@ -373,6 +373,89 @@ mod tests {
     }
     const SESSION: &str = "0123456789abcdef0123456789abcdef";
 
+    #[test]
+    fn midi_shutdown_latches_td_loss_until_child_exits() {
+        use std::{
+            io::Read,
+            os::unix::process::CommandExt,
+            process::{Command, Stdio},
+        };
+
+        let socket = UdpSocket::bind("127.0.0.1:0").unwrap();
+        socket.set_nonblocking(true).unwrap();
+        let destination = socket.local_addr().unwrap();
+        let sender = UdpSocket::bind("127.0.0.1:0").unwrap();
+        let mut monitor = Monitor {
+            socket,
+            peers: Peers::default(),
+            toe: PathBuf::from("/master.toe"),
+            selected: Some(SESSION.into()),
+        };
+        for seq in [1, 2] {
+            sender
+                .send_to(&packet(seq, SESSION, "/master.toe", "ready"), destination)
+                .unwrap();
+        }
+        monitor.check_ready().unwrap();
+
+        // A real child acknowledges its signal handler, then takes longer than
+        // the heartbeat timeout to clean up. No TD or MIDI hardware is needed.
+        let child = Command::new("/bin/sh")
+            .args([
+                "-c",
+                "trap 'sleep 4; exit 0' INT; printf ready; while :; do sleep 0.05; done",
+            ])
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .process_group(0)
+            .spawn()
+            .unwrap();
+        let mut midi = super::super::MidiTest { child };
+        let mut ready = [0; 5];
+        midi.child
+            .stdout
+            .take()
+            .unwrap()
+            .read_exact(&mut ready)
+            .unwrap();
+        assert_eq!(&ready, b"ready");
+
+        // These packets must be consumed during shutdown, not made fresh by
+        // draining the socket only after the child has exited.
+        for seq in [3, 4] {
+            sender
+                .send_to(&packet(seq, SESSION, "/master.toe", "ready"), destination)
+                .unwrap();
+        }
+        let mut failed = false;
+        let mut recovered = false;
+        let error = midi
+            .stop(|| {
+                let health = monitor.check_ready();
+                if health.is_err() && !failed {
+                    failed = true;
+                    // Even a recovery before cleanup finishes must not erase the
+                    // startup failure or permit the subsequent Bitwig handoff.
+                    for seq in [5, 6] {
+                        sender
+                            .send_to(&packet(seq, SESSION, "/master.toe", "ready"), destination)
+                            .unwrap();
+                    }
+                } else if failed && health.is_ok() {
+                    recovered = true;
+                }
+                health
+            })
+            .unwrap_err();
+        assert!(error.to_string().contains("heartbeat stopped"));
+        assert!(
+            recovered,
+            "Health polling must continue until cleanup finishes"
+        );
+        assert!(midi.child.try_wait().unwrap().unwrap().success());
+        monitor.check_ready().unwrap();
+    }
+
     /// Finite authoring check; explicitly invoked, bypasses the gig's display guard.
     /// Never starts audio/MIDI or Bitwig. The caller must arrange the TD fixture.
     #[test]
