@@ -119,6 +119,9 @@ they do not establish visual readiness. Initial imports/compilation get up to
 without a fresh heartbeat stops the launcher. During the MIDI test this also
 stops its owned child and prevents Bitwig handoff. A changed session or lost
 readiness likewise requires a new launcher run.
+Health checks continue while the MIDI child exits. Any failure is retained even
+if TD recovers before that exit: MIDI cleanup finishes, then startup stops
+without opening Bitwig.
 
 `vs_set visuals` can be used to restore TD independently after a crash, including
 while Bitwig is running. It leaves a healthy matching master in place. Frozen
@@ -143,7 +146,9 @@ cd /path/to/td_scripts/live_connection_util
 
 The default tests cover project resolution/order, failed-child handoff refusal,
 clean simulated-child shutdown, heartbeat parsing, stale/replayed packets and
-duplicate sessions. They open no physical MIDI/audio hardware or DAW apps.
+duplicate sessions. A delayed-child regression covers heartbeat loss and recovery
+during shutdown, verifying cleanup completes while the handoff stays blocked.
+They open no physical MIDI/audio hardware or DAW apps.
 The ignored `native_master_lifecycle` test operates on a real TouchDesigner
 master: it may open TD, and `VS_TD_FREEZE_CHECK` briefly suspends/resumes its
 identified process. Run it only during an explicit, checkpointed lifecycle test.
