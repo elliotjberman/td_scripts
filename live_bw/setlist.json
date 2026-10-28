@@ -2,24 +2,29 @@
   "visuals": {
     "alien2_newsection_live": {
       "name": "alien",
-      "tox": "../raytk/alien2_newsection_live_mapped.tox",
-      "preview": "../raytk/optimization_2026_10_06/optimized_preview.png"
+      "tox": "tracks/alien/mapped.tox",
+      "preview": "tracks/alien/preview.png"
     },
     "202arp3_newviz_live": {
       "name": "teachers_pet",
-      "tox": "../pops/teachers_pet_mapped.tox",
-      "preview": "../dev/live_bw/results/rehearsal_20261021/verified/teachers_pet_06.png"
+      "tox": "tracks/teachers_pet/mapped.tox",
+      "preview": "tracks/teachers_pet/preview.png"
     },
     "resignation_live": {
       "name": "resignation",
-      "tox": "../big_kahuna/individual_tracks/resignation_live/resignation_bw_mapped.tox",
-      "preview": "../dev/live_bw/results/rehearsal_20261021/verified/resignation_04.png"
+      "tox": "tracks/resignation/mapped.tox",
+      "preview": "tracks/resignation/preview.png"
     },
     "college_town_live": {
       "name": "college_town",
-      "tox": "../big_kahuna/individual_tracks/college_town_live/college_town_bw_mapped.tox",
-      "preview": "../dev/live_bw/results/rehearsal_20261021/verified/college_town_18.png"
+      "tox": "tracks/college_town/mapped.tox",
+      "preview": "tracks/college_town/preview.png"
     }
   },
-  "projects": ["alien2_newsection_live", "202arp3_newviz_live", "resignation_live", "college_town_live"]
+  "projects": [
+    "alien2_newsection_live",
+    "202arp3_newviz_live",
+    "resignation_live",
+    "college_town_live"
+  ]
 }

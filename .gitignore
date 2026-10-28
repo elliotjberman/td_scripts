@@ -129,6 +129,9 @@ dmypy.json
 .pyre/
 
 # TouchDesigner
+TDImportCache/
+.embody/
+*.toe.toc
 Backup/
 *.*.toe
 big_kahuna/config.json

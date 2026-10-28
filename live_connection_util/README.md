@@ -230,9 +230,10 @@ In TouchDesigner, use a native
 
 This uses TD's native numeric receiver without a Python JSON parser, custom
 socket receiver, or shared-memory synchronization. TD consumes the measured
-levels from Rust and does not need a second audio reader. The optional [vs_set launcher](../live_bw/VSSet.md) coordinates the full set.
-The TouchDesigner receiver/presentation is delivered separately. Neither is
-required to run this utility.
+levels from Rust and does not need a second audio reader. The optional
+[vs_set launcher](../live_bw/VSSet.md) coordinates the full set; the
+[Connection Screen](../live_bw/ConnectionScreen.md) displays this feed inside
+the TouchDesigner master. Neither is required to run this utility.
 
 All values are OSC float32. Global addresses are:
 
@@ -344,7 +345,8 @@ The original October 24 OSC test received 36 numeric channels in **1,208-byte bu
 at 27.94 Hz on this machine (the nominal 30 Hz loop is subject to OS scheduling).
 It passed startup with no listener, receiver restart, and clean final note-off
 state using an independent Python decoder. This verifies the sender and local
-UDP behavior; the receiving TD component is delivered separately.
+UDP behavior; see the [Connection Screen guide](../live_bw/ConnectionScreen.md)
+for receiver verification.
 
 The current feed includes MIDI routing (42 numeric channels, 1,396-byte bundles); existing channel
 names remain compatible. The MIDI worker owns the output connection and uses
