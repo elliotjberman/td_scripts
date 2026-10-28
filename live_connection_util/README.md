@@ -338,15 +338,9 @@ The OSC check independently decodes binary packets, verifies native numeric
 channels and note gates, and closes/reopens its receiver while the sender runs.
 The additional virtual-port score test verifies staff remapping, chord releases,
 velocity preservation, ignored file program changes, and repeated loop timing.
-These checks open no audio hardware. Their generated evidence goes in ignored
-`runs/`.
-
-The original October 24 OSC test received 36 numeric channels in **1,208-byte bundles**
-at 27.94 Hz on this machine (the nominal 30 Hz loop is subject to OS scheduling).
-It passed startup with no listener, receiver restart, and clean final note-off
-state using an independent Python decoder. This verifies the sender and local
-UDP behavior; see the [Connection Screen guide](../live_bw/ConnectionScreen.md)
-for receiver verification.
+These checks open no audio hardware. Temporary telemetry is removed after the
+checks; results are printed to the terminal. See the
+[Connection Screen guide](../live_bw/ConnectionScreen.md) for the TD receiver.
 
 The current feed includes MIDI routing (42 numeric channels, 1,396-byte bundles); existing channel
 names remain compatible. The MIDI worker owns the output connection and uses
@@ -354,29 +348,3 @@ monotonic deadlines. Attacks more than 50 ms late are skipped instead of replaye
 in a burst. Each loop releases any remaining owned notes before wrapping. Audio callbacks only
 compute peaks and update atomics; file writes and terminal rendering happen
 outside the callback. The UI needs at least 65 columns by 15 rows.
-
-## Hardware validation — October 24, 2026
-
-Ran the TUI for 12.02 seconds with Bitwig closed, the real `Arturia KeyStep 32`
-output and `Analog Four` float32 input at 48 kHz / 8 channels. No program changes.
-32 note-60 pulses per synth at 160 BPM; zero skipped beats; normal exit with
-both note states off. Each of the 32 pulse windows had an input peak above
-the -36 dBFS good threshold on both returns.
-
-| Return | Maximum peak | Range of per-pulse-window peaks |
-| --- | --- | --- |
-| Moog / input 8 | -13.72 dBFS | -15.23 to -13.72 dBFS |
-| Tetra / input 7 | -19.11 dBFS | -25.96 to -19.11 dBFS |
-
-Raw level/event telemetry: `runs/hardware-20261024.jsonl`; compact analysis:
-`runs/hardware-20261024-summary.json`. These generated files are ignored by Git.
-This verifies MIDI transmission and healthy direct input levels during the
-bounded test, not Bitwig coexistence, audible fidelity, or long-run stability.
-
-The subsequent eight-second latency test sent 21 notes per synth, with zero
-skipped beats. At exit, the rolling eight-attack averages were **13.52 ms Moog**
-and **32.04 ms Tetra** (latest individual readings 14.61 and 25.29 ms). These
-are callback-delivery response estimates for the current patches. Timing data
-are in `runs/latency-hardware-20261024.jsonl` and its `-summary.json` companion.
-Four Tetra note windows did not meet the fresh-attack rule and were excluded
-from the average; all 21 Moog windows produced estimates.

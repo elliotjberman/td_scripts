@@ -101,8 +101,6 @@ def main():
                    "bytes_per_bundle": sizes.pop(), "observed_hz": round(rate, 2),
                    "receiver_absent_at_start": "passed", "receiver_restart": "passed",
                    "final_notes_off": "passed", "hardware_opened": False}
-        (ROOT / "runs").mkdir(exist_ok=True)
-        (ROOT / "runs/osc-demo-summary.json").write_text(json.dumps(summary, indent=2) + "\n")
         print(json.dumps(summary, indent=2))
     finally:
         if child.poll() is None:

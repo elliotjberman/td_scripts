@@ -153,19 +153,14 @@ struct MidiTest {
     child: Child,
 }
 impl MidiTest {
-    fn start(binary: &Path, demo: bool) -> Result<Self> {
+    fn start(binary: &Path) -> Result<Self> {
         let mut command = Command::new(binary);
         command
-            .args(["--headless", "--until-stopped"])
+            .args(["--headless", "--until-stopped", "--osc", "127.0.0.1:9012"])
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::inherit())
             .process_group(0);
-        if demo {
-            command.arg("--demo");
-        } else {
-            command.args(["--osc", "127.0.0.1:9012"]);
-        }
         Ok(Self {
             child: command.spawn().context("Start the MIDI/audio test")?,
         })
@@ -369,7 +364,7 @@ pub fn run() -> Result<()> {
                 !macos::running("com.bitwig.studio"),
                 "Bitwig is open; MIDI test was not started."
             );
-            let mut midi = MidiTest::start(&binary, false)?;
+            let mut midi = MidiTest::start(&binary)?;
             wait_for_enter(
                 "MIDI test: 65 BPM · Tetra + Moog → Analog Four L/R. Press Enter when ready to stop it and open the set.",
                 Some(&mut midi),
@@ -390,17 +385,6 @@ pub fn run() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn demo_child_releases_cleanly_before_handoff() {
-        let binary =
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("target/release/live-connection-util");
-        let mut midi = MidiTest::start(&binary, true).unwrap();
-        thread::sleep(Duration::from_millis(500));
-        assert!(midi.child.try_wait().unwrap().is_none());
-        midi.stop(|| Ok(())).unwrap();
-        assert!(midi.child.try_wait().unwrap().unwrap().success());
-    }
 
     #[test]
     fn failed_child_prevents_handoff() {

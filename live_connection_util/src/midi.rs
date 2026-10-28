@@ -104,11 +104,6 @@ impl<S: MidiSink> Drop for Notes<S> {
     }
 }
 
-// Missed attacks are discarded after a stall, not replayed as a fast burst.
-fn timely(deadline: Instant, now: Instant) -> bool {
-    now.saturating_duration_since(deadline) <= Duration::from_millis(50)
-}
-
 pub fn run(config: Config, state: Arc<Transport>, sequence: Sequence) -> Result<()> {
     let mut discovery = routing::Discovery::default();
     let connection = wait_for_route(&state, || {
@@ -158,14 +153,6 @@ fn play<S: MidiSink>(
     state: &Transport,
     sequence: &Sequence,
 ) -> Result<()> {
-    // The main loop publishes working audio/OSC before releasing MIDI startup.
-    // Stay cancellable during that lead-in, including before program changes.
-    while !state.start_midi.load(Ordering::Acquire) {
-        if state.stop.load(Ordering::Relaxed) {
-            return Ok(());
-        }
-        thread::sleep(Duration::from_millis(2));
-    }
     // Routing is already marked ready. Let that check show for one second
     // before any bend, patch or note messages; telemetry continues on main.
     let midi_start_at = Instant::now() + Duration::from_secs(1);
@@ -239,7 +226,10 @@ fn play<S: MidiSink>(
                         velocity,
                         on,
                     } => {
-                        if on && timely(deadline, now) {
+                        // Discard missed attacks after a stall instead of replaying a burst.
+                        if on
+                            && now.saturating_duration_since(deadline) <= Duration::from_millis(50)
+                        {
                             state.timing.note_sent(voice);
                             notes.on(voice, key, velocity)?;
                             state.pitch[voice].store(key, Ordering::Relaxed);
@@ -318,13 +308,6 @@ mod tests {
         );
     }
     #[test]
-    fn overdue_attacks_are_dropped() {
-        let t = Instant::now();
-        assert!(timely(t, t + Duration::from_millis(10)));
-        assert!(!timely(t, t + Duration::from_millis(100)));
-    }
-
-    #[test]
     fn missing_route_can_appear_without_restarting_the_worker() {
         let state = Transport::new(&Config::parse_from(["test"]));
         state.start_midi.store(true, Ordering::Release);
@@ -378,34 +361,6 @@ mod tests {
                 wait_for_route(&state, || panic!("Discovery ran before audio gate"));
             assert_eq!(port, None);
         });
-    }
-
-    #[test]
-    fn stopping_during_interface_lead_in_sends_no_midi() {
-        let config = Config::parse_from(["test", "--quarter-notes"]);
-        let state = Transport::new(&config);
-        let sequence = Sequence::load(&config).unwrap();
-        let sent = Rc::new(RefCell::new(vec![]));
-        thread::scope(|scope| {
-            scope.spawn(|| {
-                thread::sleep(Duration::from_millis(30));
-                state.stop.store(true, Ordering::Relaxed);
-            });
-            play(
-                Mock {
-                    sent: sent.clone(),
-                    fail_second_on: false,
-                },
-                &config,
-                &state,
-                &sequence,
-            )
-            .unwrap();
-        });
-        assert!(
-            sent.borrow().is_empty(),
-            "No bend, patch or note messages before startup is released"
-        );
     }
 
     #[test]

@@ -92,7 +92,7 @@ class FabFilterProQPhaseTests(unittest.TestCase):
 
         self.assertEqual(len(reports), 1)
         self.assertTrue(reports[0].changed)
-        self.assertIn("00000000", patched_xml)
+        self.assertEqual(proq3_vst3.state_from_block(patched_xml).mode(), "zero_latency")
 
     def test_proq3_state_can_crud_bands(self) -> None:
         state = proq3_vst3.ProQ3State(make_processor("natural_phase"))
