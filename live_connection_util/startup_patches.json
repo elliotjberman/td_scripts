@@ -1,0 +1,29 @@
+{
+  "startup_order": [
+    "E0 00 40",
+    "E1 00 40",
+    "C0 18",
+    "B1 20 00",
+    "C1 4D"
+  ],
+  "moog": {
+    "model": "Sirin",
+    "channel": 1,
+    "raw_program": 24,
+    "bank_msb": null,
+    "bank_lsb": null,
+    "source_project": "college_town_live",
+    "native_bitwig_delivery": "Audit found startup delivery absent; use source-intended and hardware-tested program.",
+    "source_audit_sha256": "296396bf36c6b1438bfac733aeed86d6be233a3e40bad00055e7a39197a70e1c"
+  },
+  "tetra": {
+    "channel": 2,
+    "display_bank": 1,
+    "display_program": 78,
+    "bank_cc": 32,
+    "raw_bank": 0,
+    "raw_program": 77,
+    "manual": "https://sequential.com/downloads/tetra/doc/Tetra_Manual_v.1.3.pdf"
+  },
+  "verification": "Virtual CoreMIDI destination asserts actual startup byte order, command-line overrides, and --keep-programs. Physical patches change on user restart."
+}
