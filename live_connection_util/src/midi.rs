@@ -367,7 +367,6 @@ mod tests {
     fn stopping_during_routing_lead_in_sends_no_midi() {
         let config = Config::parse_from(["test", "--quarter-notes"]);
         let state = Transport::new(&config);
-        state.start_midi.store(true, Ordering::Release);
         let sequence = Sequence::load(&config).unwrap();
         let sent = Rc::new(RefCell::new(vec![]));
         thread::scope(|scope| {
