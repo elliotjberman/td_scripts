@@ -9,20 +9,19 @@ import select
 import socket
 import struct
 import subprocess
+import tempfile
 import termios
 import time
 
 ROOT = Path(__file__).resolve().parents[1]
 BIN = ROOT / "target/release/live-connection-util"
-RUNS = ROOT / "runs"
-RUNS.mkdir(exist_ok=True)
 
 
-def terminal_test():
+def terminal_test(runs):
     master, slave = pty.openpty()
     fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 100, 0, 0))
     original = termios.tcgetattr(slave)
-    path = RUNS / "terminal-demo.jsonl"
+    path = runs / "terminal-demo.jsonl"
     environment = dict(os.environ, TERM="xterm-256color", COLORTERM="truecolor")
     environment.pop("NO_COLOR", None)
     child = subprocess.Popen(
@@ -54,7 +53,6 @@ def terminal_test():
             child.wait()
         os.close(master)
         os.close(slave)
-    (RUNS / "terminal-demo.ansi").write_bytes(captured)
     text = captured.decode()
     for fragment in ["LIVE CONNECTION UTIL", "RUNNING", "PAUSED", "Moog", "Tetra", "GOOD", "LOW", "NO SIGNAL", "Latency -- (unmeasured)", "████", "\x1b[?1049h", "\x1b[?1049l", "\x1b[38;5;10m", "\x1b[38;5;9m", "\x1b[38;5;208m"]:
         assert fragment in text, repr(fragment)
@@ -68,8 +66,8 @@ def terminal_test():
     print("PASS: real TUI render and green/red/orange colors, pause/resume/Ctrl-C, final telemetry and terminal restoration")
 
 
-def telemetry_test():
-    path = RUNS / "telemetry-demo.jsonl"
+def telemetry_test(runs):
+    path = runs / "telemetry-demo.jsonl"
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as receiver:
         receiver.bind(("127.0.0.1", 0))
         receiver.settimeout(0.1)
@@ -105,5 +103,7 @@ def telemetry_test():
     print(f"PASS: {len(frames)} JSONL/UDP frames, all three meter colors, 19 pulses/channel after two 1s pauses at 160 BPM")
 
 
-terminal_test()
-telemetry_test()
+if __name__ == "__main__":
+    with tempfile.TemporaryDirectory(prefix="lcu-runtime-") as folder:
+        terminal_test(Path(folder))
+        telemetry_test(Path(folder))

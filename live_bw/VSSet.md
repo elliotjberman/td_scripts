@@ -77,11 +77,6 @@ cd /path/to/td_scripts/live_connection_util
 The gig commands never fetch or build; a missing installed binary fails visibly.
 The `bwset` alias uses the Rust launcher; Python is not needed at showtime.
 
-Validation covers exact project ordering, missing/ambiguous projects, failed-test
-handoff refusal, and clean SIGINT shutdown of the simulated MIDI child (no
-hardware streams). Native master save/reopen checks are separate from real
-Bitwig playback and hardware-audio rehearsal.
-
 ## TouchDesigner health
 
 The embedded master `Heartbeat` component sends one OSC/UDP packet every 0.5s
@@ -134,25 +129,17 @@ Bitwig crash recovery and per-project loading acknowledgments remain separate.
 
 ## Validation
 
-Build both release binaries before the launcher's child-process integration test:
+Run the launcher tests without opening DAW apps or audio/MIDI hardware:
 
 ```sh
 cd /path/to/td_scripts/live_connection_util
-./cargo-local build --locked --release --bins
 ./cargo-local test --locked --bin vs_set
 ./cargo-local clippy --locked --all-targets -- -D warnings
 ./cargo-local fmt --check
 ```
 
-The default tests cover project resolution/order, failed-child handoff refusal,
-clean simulated-child shutdown, heartbeat parsing, stale/replayed packets and
-duplicate sessions. A delayed-child regression covers heartbeat loss and recovery
-during shutdown, verifying cleanup completes while the handoff stays blocked.
-They open no physical MIDI/audio hardware or DAW apps.
-The ignored `native_master_lifecycle` test operates on a real TouchDesigner
-master: it may open TD, and `VS_TD_FREEZE_CHECK` briefly suspends/resumes its
-identified process. Run it only during an explicit, checkpointed lifecycle test.
-Full startup/display rehearsal uses the separately delivered TD assets; earlier
-local testing included a cold reopen to 4/4 Ready, reuse of a matching running
-master, and heartbeat loss/recovery without opening a duplicate. Bitwig crash
-recovery remains outside this launcher.
+The tests cover project resolution/order, failed-child handoff refusal,
+heartbeat parsing, stale/replayed packets and duplicate sessions. A delayed-child
+regression covers heartbeat loss and recovery during shutdown, verifying cleanup
+completes while the handoff stays blocked. Full startup/display rehearsal still
+requires TouchDesigner and the intended display.

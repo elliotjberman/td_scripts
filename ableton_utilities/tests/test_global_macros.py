@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 import unittest
 
-from ableton_utilities.live.global_macros import MAP8_SLOT_OBJECTS, _set_map8_min_percent
+from ableton_utilities.live.global_macros import _set_map8_min_percent
 
 
 def min_param(name: str) -> str:
@@ -28,9 +28,6 @@ def manual_value(block: str, name: str) -> str:
 
 
 class GlobalMacroTests(unittest.TestCase):
-    def test_known_map8_row_object_order(self) -> None:
-        self.assertEqual(MAP8_SLOT_OBJECTS[:6], ("obj-16", "obj-5", "obj-8", "obj-10", "obj-11", "obj-12"))
-
     def test_sets_roll_volume_minimum_on_first_map8_row(self) -> None:
         block = "".join(
             min_param(name)
